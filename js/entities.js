@@ -71,27 +71,56 @@ class Spider {
             }
         }
 
+        // Check ground collision
         if (this.pos.y >= height - this.radius) {
             this.pos.y = height - this.radius;
             this.land();
         }
 
+        // Check wall collisions
         if (this.pos.x <= this.radius || this.pos.x >= width - this.radius) {
             this.pos.x = constrain(this.pos.x, this.radius, width - this.radius);
             this.vel.x *= -0.5;
         }
 
+        // Check ceiling
         if (this.pos.y <= this.radius) {
             this.pos.y = this.radius;
             this.vel.y *= -0.5;
         }
+        
+        // Check home branch collision (one-way platform)
+        if (window.homeBranch && this.vel.y > 0) { // Only when falling
+            let branch = window.homeBranch;
+            // Collision should be right at the visual surface
+            let branchTop = branch.y - 5; // Much closer to actual visual surface
+            
+            // Check if spider is within branch X range
+            let inXRange = false;
+            if (branch.side === 'left') {
+                inXRange = this.pos.x >= 0 && this.pos.x <= branch.endX + 20;
+            } else {
+                inXRange = this.pos.x >= branch.endX - 20 && this.pos.x <= width;
+            }
+            
+            // One-way collision: only collide when falling from above
+            if (inXRange && 
+                this.pos.y - this.radius <= branchTop && 
+                this.pos.y + this.radius >= branchTop &&
+                this.pos.y - this.radius < branchTop) {
+                this.pos.y = branchTop - this.radius;
+                this.land();
+            }
+        }
 
+        // Check obstacle collisions
         for (let obstacle of obstacles) {
             if (this.checkObstacleCollision(obstacle)) {
                 this.landOnObstacle(obstacle);
             }
         }
 
+        // Check web strand collisions
         for (let strand of webStrands) {
             if (strand === currentStrand) continue;
             
@@ -100,6 +129,7 @@ class Spider {
             }
         }
         
+        // Check food box collisions
         for (let i = foodBoxes.length - 1; i >= 0; i--) {
             let box = foodBoxes[i];
             if (dist(this.pos.x, this.pos.y, box.pos.x, box.pos.y) < this.radius + box.radius) {
