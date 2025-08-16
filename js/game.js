@@ -43,35 +43,56 @@ function setup() {
     
     spider = new Spider(width / 2, height - 50);
     
-    // Create obstacles
+    // Create obstacles with better distribution
     let numObstacles = Math.floor((width * height) / 60000);
-    numObstacles = constrain(numObstacles, 8, 20);
+    numObstacles = constrain(numObstacles, 10, 25);
     
-    for (let i = 0; i < numObstacles; i++) {
-        let x = random(100, width - 100);
-        let y = random(100, height - 150);
-        let radius = random(25, 45);
-        let type = random() < 0.6 ? 'branch' : 'leaf';
-        
-        let valid = true;
-        for (let obstacle of obstacles) {
-            if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 30) {
-                valid = false;
-                break;
+    // Divide screen into zones for better distribution
+    let zones = [
+        { minY: 50, maxY: height * 0.3 },        // Top zone
+        { minY: height * 0.3, maxY: height * 0.6 }, // Middle zone
+        { minY: height * 0.6, maxY: height - 100 }  // Bottom zone
+    ];
+    
+    let obstaclesPerZone = Math.ceil(numObstacles / 3);
+    
+    for (let zone of zones) {
+        for (let i = 0; i < obstaclesPerZone; i++) {
+            let attempts = 0;
+            let placed = false;
+            
+            while (!placed && attempts < 20) {
+                let x = random(80, width - 80);
+                let y = random(zone.minY, zone.maxY);
+                let radius = random(25, 45);
+                let type = random() < 0.6 ? 'branch' : 'leaf';
+                
+                let valid = true;
+                for (let obstacle of obstacles) {
+                    if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 40) {
+                        valid = false;
+                        break;
+                    }
+                }
+                
+                if (valid) {
+                    obstacles.push(new Obstacle(x, y, radius, type));
+                    placed = true;
+                }
+                attempts++;
             }
-        }
-        
-        if (valid) {
-            obstacles.push(new Obstacle(x, y, radius, type));
         }
     }
     
-    // Add guaranteed anchor points
+    // Add guaranteed anchor points with better bottom coverage
     obstacles.push(new Obstacle(50, height/2, 35, 'branch'));
     obstacles.push(new Obstacle(width - 50, height/2, 35, 'branch'));
     obstacles.push(new Obstacle(width/2, 50, 40, 'leaf'));
-    obstacles.push(new Obstacle(width/4, height - 200, 30, 'leaf'));
-    obstacles.push(new Obstacle(3*width/4, height - 200, 30, 'branch'));
+    
+    // More bottom anchors for reachability
+    obstacles.push(new Obstacle(width/4, height - 120, 35, 'leaf'));
+    obstacles.push(new Obstacle(3*width/4, height - 120, 35, 'branch'));
+    obstacles.push(new Obstacle(width/2, height - 150, 30, 'branch'));
     
     if (width > 1200) {
         obstacles.push(new Obstacle(width/3, height/3, 35, 'leaf'));
@@ -132,9 +153,26 @@ function draw() {
         }
     }
     
-    for (let strand of webStrands) {
+    for (let i = webStrands.length - 1; i >= 0; i--) {
+        let strand = webStrands[i];
         strand.update();
-        strand.display();
+        
+        // Remove broken strands
+        if (strand.broken) {
+            // Create particles for breaking effect
+            if (strand.path && strand.path.length > 0) {
+                let midPoint = strand.path[Math.floor(strand.path.length / 2)];
+                for (let j = 0; j < 5; j++) {
+                    let p = new Particle(midPoint.x, midPoint.y);
+                    p.color = color(255, 255, 255);
+                    p.vel = createVector(random(-2, 2), random(-3, 0));
+                    particles.push(p);
+                }
+            }
+            webStrands.splice(i, 1);
+        } else {
+            strand.display();
+        }
     }
     
     for (let node of webNodes) {
