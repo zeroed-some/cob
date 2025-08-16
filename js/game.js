@@ -506,38 +506,56 @@ function drawSkyGradient() {
     }
 }
 
-function drawMoon() {
+function drawMoon()
+{
     push();
     noStroke();
-    // Brighter moon
+
+    // Brighter, farther-reaching moon glow
     fill(255, 255, 240, moonOpacity);
-    ellipse(width - 100, moonY, 50);
-    // Brighter glow
-    fill(255, 255, 220, moonOpacity * 0.5);
-    ellipse(width - 100, moonY, 70);
-    // Extra outer glow for more brightness
-    fill(255, 255, 200, moonOpacity * 0.2);
-    ellipse(width - 100, moonY, 100);
-    
+    ellipse(width - 100, moonY, 52);
+
+    // Multi-layer radial glow for reach
+    push();
+    blendMode(ADD);
+    fill(255, 255, 230, moonOpacity * 0.55);
+    ellipse(width - 100, moonY, 90);
+    fill(255, 255, 210, moonOpacity * 0.35);
+    ellipse(width - 100, moonY, 140);
+    fill(220, 230, 255, moonOpacity * 0.22);
+    ellipse(width - 100, moonY, 200);
+    pop();
+
     // Moon craters with better contrast
     fill(240, 240, 210, moonOpacity * 0.7);
     ellipse(width - 105, moonY - 5, 8);
     ellipse(width - 95, moonY + 8, 12);
     ellipse(width - 110, moonY + 10, 6);
-    pop();
-    
-    if (gamePhase === 'NIGHT') {
-        randomSeed(42);
-        for (let i = 0; i < 50; i++) {
-            let x = random(width);
-            let y = random(height * 0.6);
-            let brightness = random(100, 255);
-            stroke(255, 255, 255, brightness);
-            strokeWeight(random(1, 2));
-            point(x, y);
-        }
-        randomSeed(millis());
+
+    // Subtle "godrays" emanating from the moon
+    push();
+    blendMode(ADD);
+    let baseA = frameCount * 0.0023; // slow drift
+    let rayCount = 8;
+    for (let i = 0; i < rayCount; i++) {
+        let a = baseA + i * (Math.PI * 2 / rayCount) + (noise(i * 0.2, frameCount * 0.005) - 0.5) * 0.2;
+        let len = 140 + noise(i * 1.7, frameCount * 0.003) * 120; // 140-260px
+        let w0 = 6 + noise(i * 0.9) * 6;   // near width
+        let w1 = 18 + noise(i * 0.7) * 16; // far width
+        let cx = width - 100;
+        let cy = moonY;
+        fill(220, 230, 255, (moonOpacity * 0.18));
+        noStroke();
+        beginShape();
+        vertex(cx + Math.cos(a + 0.03) * w0, cy + Math.sin(a + 0.03) * w0);
+        vertex(cx + Math.cos(a - 0.03) * w0, cy + Math.sin(a - 0.03) * w0);
+        vertex(cx + Math.cos(a) * len + Math.cos(a + 0.12) * w1, cy + Math.sin(a) * len + Math.sin(a + 0.12) * w1);
+        vertex(cx + Math.cos(a) * len + Math.cos(a - 0.12) * w1, cy + Math.sin(a) * len + Math.sin(a - 0.12) * w1);
+        endShape(CLOSE);
     }
+    pop();
+
+    pop();
 }
 
 function updateResources() {
