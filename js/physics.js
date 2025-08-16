@@ -27,13 +27,16 @@ class WebStrand {
             }
         }
         
-        // Apply gravity to path points for realistic sagging
+        // Apply gravity to path points for realistic sagging, with wind and smoothing
         if (this.path && this.path.length > 2 && !this.broken) {
+            // low-frequency wind using Perlin noise (stable over time)
+            let windX = (noise(frameCount * 0.005, 12.3) - 0.5) * 0.6;
+            let windY = (noise(frameCount * 0.005, 91.7) - 0.5) * 0.4;
+
             for (let i = 1; i < this.path.length - 1; i++) {
-                // Don't move the anchor points
                 let point = this.path[i];
-                
-                // Check if this point is supported by anything
+
+                // Check if supported by an obstacle
                 let supported = false;
                 for (let obstacle of obstacles) {
                     if (dist(point.x, point.y, obstacle.x, obstacle.y) < obstacle.radius + 5) {
@@ -41,13 +44,23 @@ class WebStrand {
                         break;
                     }
                 }
-                
-                // Apply gravity if not supported
+
                 if (!supported) {
-                    point.y += 0.3; // Gravity effect
-                    
-                    // Add slight pendulum motion
-                    point.x += sin(frameCount * 0.02 + i) * 0.1;
+                    // gravity (slightly softer) and wind drift
+                    point.y += 0.22;
+                    point.x += windX * (0.6 + i / this.path.length * 0.8);
+                    point.y += windY * 0.4;
+                }
+            }
+
+            // Laplacian smoothing to create flowing catenary-like curves
+            for (let iter = 0; iter < 2; iter++) {
+                for (let i = 1; i < this.path.length - 1; i++) {
+                    let prev = this.path[i - 1];
+                    let curr = this.path[i];
+                    let next = this.path[i + 1];
+                    curr.x = lerp(curr.x, (prev.x + next.x) * 0.5, 0.18);
+                    curr.y = lerp(curr.y, (prev.y + next.y) * 0.5, 0.18);
                 }
             }
         }
@@ -141,8 +154,8 @@ class WebStrand {
             
             // Add sag based on horizontal distance
             let horizontalDist = abs(this.end.x - this.start.x);
-            let sag = horizontalDist * 0.1; // More sag for longer horizontal spans
-            midY += sag;
+            let sag = horizontalDist * 0.12;
+            midY += sag * (1 - cos(PI * 0.5));
             
             beginShape();
             curveVertex(this.start.x, this.start.y);
