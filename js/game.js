@@ -53,7 +53,7 @@ function setup() {
     
     // Generate twigs with FIXED positions
     let twigs = [];
-    let numTwigs = 5;
+    let numTwigs = 7;
     for (let i = 0; i < numTwigs; i++) {
         let t = 0.2 + (0.6 * i / (numTwigs - 1)); // Evenly distributed
         let x = lerp(branchStartX, branchEndX, t); // Calculate actual X position
@@ -62,29 +62,30 @@ function setup() {
             length: 20 + (i * 4), // Vary length slightly
             angle: (-PI/4 + (i * PI/20)) * (homeBranchSide === 'right' ? -1 : 1),
             subTwigs: [
-                { pos: 0.7, length: 5, angle: -5 },
-                { pos: 0.5, length: 4, angle: 4 }
+                { pos: 0.65, length: 6, angle: -6 },
+                { pos: 0.45, length: 5, angle: 5 },
+                { pos: 0.8,  length: 4, angle: -3 }
             ]
         });
     }
     
     // Generate leaves with FIXED positions
     let leaves = [];
-    for (let i = 0; i < 3; i++) {
-        let t = 0.3 + (0.4 * i / 2); // Distribute between 0.3 and 0.7
+    for (let i = 0; i < 5; i++) {
+        let t = 0.3 + (0.4 * i / 4); // Distribute between 0.3 and 0.7
         let x = lerp(branchStartX, branchEndX, t);
         leaves.push({
             x: x, // Store actual position
-            yOffset: -homeBranchThickness - (i * 10),
-            rotation: -PI/6 + (i * PI/6),
-            width: 15,
-            height: 8
+            yOffset: -homeBranchThickness - (i * 10) + (i % 2 === 0 ? -4 : 3),
+            rotation: (-PI/7 + (i * PI/8)) * (homeBranchSide === 'right' ? -1 : 1),
+            width: 16 + (i % 2 ? 2 : -1),
+            height: 8 + (i % 2 ? 1 : 0)
         });
     }
     
     // Generate bark textures with FIXED positions
     let barkTextures = [];
-    for (let x = Math.min(branchStartX, branchEndX); x < Math.max(branchStartX, branchEndX); x += 20) {
+    for (let x = Math.min(branchStartX, branchEndX); x < Math.max(branchStartX, branchEndX); x += 16) {
         barkTextures.push({
             x: x,
             yOff: -5 + (x % 10), // Deterministic offset based on position
@@ -151,6 +152,20 @@ function setup() {
                     if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 40) {
                         valid = false;
                         break;
+                    }
+                }
+                // Avoid overlapping the home branch body (transform point into branch frame)
+                if (valid) {
+                    const ca = Math.cos(window.homeBranch.angle);
+                    const sa = Math.sin(window.homeBranch.angle);
+                    const relY = y - window.homeBranch.y; // translate to branch's local origin
+                    const xr = x * ca + relY * sa;        // rotate into branch frame
+                    const yr = -x * sa + relY * ca;
+                    const minX = Math.min(window.homeBranch.startX, window.homeBranch.endX) - radius - 8;
+                    const maxX = Math.max(window.homeBranch.startX, window.homeBranch.endX) + radius + 8;
+                    const halfThickness = window.homeBranch.thickness + radius + 6;
+                    if (xr >= minX && xr <= maxX && Math.abs(yr) <= halfThickness) {
+                        valid = false; // too close to the branch hull
                     }
                 }
                 
@@ -361,110 +376,139 @@ function drawSkyGradient() {
         endShape(CLOSE);
         pop();
         
-        // Main branch with organic shape and taper
+        // Main branch with organic shape and taper (gnarlier)
         push();
         translate(0, branch.y);
         rotate(branch.angle);
-        
-        // Dark brown base
+
+        // Base color varies by phase
         noStroke();
         if (gamePhase === 'NIGHT') {
             fill(30, 15, 5);
         } else {
             fill(92, 51, 23);
         }
-        
-        // Create tapered, organic branch shape
-        beginShape();
-        // Top edge with bumps and curves
-        vertex(branch.startX, -branch.thickness);
-        bezierVertex(
-            branch.startX + (branch.endX - branch.startX) * 0.2, -branch.thickness + 3,
-            branch.startX + (branch.endX - branch.startX) * 0.4, -branch.thickness * 0.8 + 2,
-            branch.startX + (branch.endX - branch.startX) * 0.6, -branch.thickness * 0.6
-        );
-        bezierVertex(
-            branch.startX + (branch.endX - branch.startX) * 0.8, -branch.thickness * 0.4,
-            branch.endX - 20, -branch.thickness * 0.3,
-            branch.endX, -branch.thickness * 0.2
-        );
-        
-        // Bottom edge with natural irregularities
-        vertex(branch.endX, branch.thickness * 0.2);
-        bezierVertex(
-            branch.endX - 20, branch.thickness * 0.3,
-            branch.startX + (branch.endX - branch.startX) * 0.8, branch.thickness * 0.4 + 2,
-            branch.startX + (branch.endX - branch.startX) * 0.6, branch.thickness * 0.6
-        );
-        bezierVertex(
-            branch.startX + (branch.endX - branch.startX) * 0.4, branch.thickness * 0.8,
-            branch.startX + (branch.endX - branch.startX) * 0.2, branch.thickness - 3,
-            branch.startX, branch.thickness
-        );
-        endShape(CLOSE);
-        
-        // Add lighter brown highlights
-        if (gamePhase === 'NIGHT') {
-            fill(50, 25, 10, 150);
-        } else {
-            fill(139, 90, 43, 150);
+
+        // Build an irregular, tapered hull using noise to perturb the top/bottom edges
+        let segs = 24; // more segments for detail
+        let topPts = [];
+        let botPts = [];
+        let len = branch.endX - branch.startX;
+        for (let i = 0; i <= segs; i++) {
+            let t = i / segs;
+            let x = branch.startX + len * t;
+            // base radius tapers along the branch
+            let r = lerp(branch.thickness, branch.thickness * 0.35, t);
+            // add subtle bumpiness using noise keyed by x so it stays stable
+            let n = noise(x * 0.02, 3.1) - 0.5; // [-0.5, 0.5]
+            let bump = n * (4 + 6 * (1 - t)); // larger bumps near base
+            // slight sine undulation so it feels woody
+            let und = sin(t * TWO_PI * 1.5) * 2 * (1 - t);
+            let yTop = -(r + bump + und);
+            let yBot =  (r + bump * 0.6 + und * 0.4);
+            topPts.push({x, y: yTop});
+            botPts.push({x, y: yBot});
         }
-        
-        // Top highlight
+
         beginShape();
-        vertex(branch.startX + 10, -branch.thickness + 5);
-        bezierVertex(
-            branch.startX + (branch.endX - branch.startX) * 0.3, -branch.thickness * 0.7,
-            branch.startX + (branch.endX - branch.startX) * 0.6, -branch.thickness * 0.5,
-            branch.endX - 30, -branch.thickness * 0.2 + 2
-        );
-        vertex(branch.endX - 30, 0);
-        bezierVertex(
-            branch.startX + (branch.endX - branch.startX) * 0.6, -2,
-            branch.startX + (branch.endX - branch.startX) * 0.3, -5,
-            branch.startX + 10, -8
-        );
+        // top edge forward
+        for (let p of topPts) {
+            vertex(p.x, p.y);
+        }
+        // bottom edge back
+        for (let i = botPts.length - 1; i >= 0; i--) {
+            vertex(botPts[i].x, botPts[i].y);
+        }
         endShape(CLOSE);
-        
-        // Bark texture with grooves
-        stroke(60, 30, 10, 100);
+
+        // Add a secondary offshoot (fork) around 60% along the branch
+        let forkT = 0.6;
+        let forkX = branch.startX + len * forkT;
+        let forkLen = min(70, len * 0.18);
+        let forkAngle = (branch.side === 'right' ? -1 : 1) * (-PI/6 + noise(7.7) * PI/12);
+
+        // draw the fork as a tapered curved limb
+        push();
+        translate(forkX, lerp(topPts[Math.floor(segs * forkT)].y, botPts[Math.floor(segs * forkT)].y, 0.15));
+        rotate(forkAngle);
+        noStroke();
+        if (gamePhase === 'NIGHT') {
+            fill(35, 18, 6);
+        } else {
+            fill(102, 58, 28);
+        }
+        beginShape();
+        vertex(0, -6);
+        bezierVertex(forkLen * 0.25, -8, forkLen * 0.55, -4, forkLen, 0);
+        vertex(forkLen, 3);
+        bezierVertex(forkLen * 0.55, 0, forkLen * 0.25, 4, 0, 6);
+        endShape(CLOSE);
+        // tiny side twig on the fork
+        stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
+        strokeWeight(3);
+        line(forkLen * 0.4, 0, forkLen * 0.4 + 14, -10);
+        pop();
+
+        // Lighter highlights along the crown ridge
+        if (gamePhase === 'NIGHT') {
+            fill(50, 25, 10, 140);
+        } else {
+            fill(139, 90, 43, 160);
+        }
+        beginShape();
+        for (let i = 2; i <= segs - 2; i++) {
+            let p = topPts[i];
+            vertex(p.x, p.y + 3);
+        }
+        for (let i = segs - 2; i >= 2; i--) {
+            let p = topPts[i];
+            vertex(p.x, p.y + 7);
+        }
+        endShape(CLOSE);
+
+        // Bark grooves: short diagonal strokes with slight randomness
+        stroke(60, 30, 10, 110);
         strokeWeight(1);
-        for (let i = 0; i < branch.barkTextures.length; i += 2) {
-            let texture = branch.barkTextures[i];
-            // Vertical grooves
-            line(texture.x, texture.yOff - 5, texture.x + 3, texture.yOff + 8);
-            // Horizontal texture
-            if (i % 4 === 0) {
-                line(texture.x - 5, texture.yOff, texture.x + 15, texture.yOff + 2);
+        for (let i = 0; i < branch.barkTextures.length; i++) {
+            let bx = branch.barkTextures[i].x;
+            // only draw inside the branch span
+            if (bx < min(branch.startX, branch.endX) || bx > max(branch.startX, branch.endX)) continue;
+            let t = (bx - branch.startX) / (len || 1);
+            let r = lerp(branch.thickness, branch.thickness * 0.35, t);
+            let ny = (noise(bx * 0.03, 9.2) - 0.5) * 10;
+            let y = ny;
+            line(bx - 3, y - r * 0.2, bx + 4, y + r * 0.25);
+            if (i % 3 === 0) {
+                line(bx - 5, y + 1, bx + 9, y + 3);
             }
         }
-        
-        // Add knots and bumps
+
+        // Knots
         noStroke();
         if (gamePhase === 'NIGHT') {
             fill(40, 20, 5);
         } else {
             fill(80, 40, 15);
         }
-        
-        // A couple of knots
-        ellipse(branch.startX + (branch.endX - branch.startX) * 0.3, -3, 15, 12);
-        ellipse(branch.startX + (branch.endX - branch.startX) * 0.7, 2, 10, 8);
+        ellipse(branch.startX + len * 0.28, -2, 14, 11);
+        ellipse(branch.startX + len * 0.73, 3, 11, 9);
+
+        pop();
         
         // Small twigs with organic angles
         stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
         for (let twig of branch.twigs) {
             push();
             translate(twig.x, 0);
-            
-            // Make twigs thicker at base
+
+            // Make twigs thicker at base, drawn as a gentle curve
             strokeWeight(4);
-            line(0, 0, twig.length * 0.3, twig.length * 0.1);
+            bezier(0, 0, twig.length * 0.18, twig.length * 0.05, twig.length * 0.42, twig.length * 0.12, twig.length * 0.62, twig.length * 0.16);
             strokeWeight(3);
-            line(twig.length * 0.3, twig.length * 0.1, twig.length * 0.6, twig.length * 0.15);
+            bezier(twig.length * 0.62, twig.length * 0.16, twig.length * 0.74, twig.length * 0.18, twig.length * 0.86, twig.length * 0.2, twig.length, twig.length * 0.22);
             strokeWeight(2);
-            line(twig.length * 0.6, twig.length * 0.15, twig.length, twig.length * 0.2);
-            
+            line(twig.length * 0.82, twig.length * 0.2, twig.length * 1.05, twig.length * 0.28);
+
             // Tiny sub-twigs
             strokeWeight(1);
             for (let subTwig of twig.subTwigs) {
