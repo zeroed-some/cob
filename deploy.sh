@@ -13,19 +13,34 @@ STAGE="${STAGE_DIR:-$HOME/builds/$SITE/$STAMP}"
 
 # ── ensure dirs exist ───────────────────────────────────────────────────
 echo "▶ Ensure web root"
-sudo install -d -m 0755 "$RELEASES"
 sudo install -d -m 0755 "$WEB_ROOT"
+sudo install -d -m 0755 "$RELEASES"
 
 # ── stage ───────────────────────────────────────────────────────────────
 echo "▶ Stage files → $STAGE"
 mkdir -p "$STAGE"
+# Only ship the static site files we care about
 rsync -az --delete \
-  --exclude deploy.sh --exclude .git \
+  --include '/index.html' \
+  --include '/css/***' \
+  --include '/js/***' \
+  --exclude '*' \
   "$PROJECT_DIR"/ "$STAGE"/
+
+echo "▶ Verify staged content"
+ls -l "$STAGE"
+test -f "$STAGE/index.html" || { echo "✗ index.html missing in stage"; exit 1; }
+test -d "$STAGE/css"        || { echo "✗ css/ missing in stage"; exit 1; }
+test -d "$STAGE/js"         || { echo "✗ js/ missing in stage";  exit 1; }
 
 # ── publish ─────────────────────────────────────────────────────────────
 echo "▶ Publish → $RELEASES/$STAMP"
 sudo rsync -az --delete "$STAGE"/ "$RELEASES/$STAMP"/
+
+echo "▶ Verify release contents"
+sudo test -f "$RELEASES/$STAMP/index.html" || { echo "✗ index.html missing in release"; exit 1; }
+sudo test -d "$RELEASES/$STAMP/css"        || { echo "✗ css/ missing in release"; exit 1; }
+sudo test -d "$RELEASES/$STAMP/js"         || { echo "✗ js/ missing in release";  exit 1; }
 
 # ── flip symlink (with rollback trap) ───────────────────────────────────
 echo "▶ Flip symlink"
