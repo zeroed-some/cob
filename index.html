@@ -3,83 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cob - Spider Web Game</title>
+    <title>Cob :: Monch Fireflies</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <style>
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+            background: #000;
+            width: 100vw;
+            height: 100vh;
             font-family: Arial, sans-serif;
         }
         #game-container {
-            position: relative;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            border-radius: 10px;
-            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
         }
         #info {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 20px;
+            left: 20px;
             color: white;
-            font-size: 14px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
             pointer-events: none;
             z-index: 10;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 15px;
+            border-radius: 8px;
         }
         #phase-indicator {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 20px;
+            right: 20px;
             color: white;
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
             pointer-events: none;
             z-index: 10;
             text-align: right;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 15px;
+            border-radius: 8px;
         }
         #web-meter {
             position: absolute;
-            bottom: 20px;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
-            width: 200px;
-            height: 30px;
-            background: rgba(0,0,0,0.3);
-            border: 2px solid rgba(255,255,255,0.5);
-            border-radius: 15px;
+            width: 300px;
+            height: 40px;
+            background: rgba(0,0,0,0.4);
+            border: 3px solid rgba(255,255,255,0.6);
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         #web-meter-fill {
             height: 100%;
             background: linear-gradient(90deg, #87CEEB, #E0F6FF);
             transition: width 0.3s ease;
-            box-shadow: inset 0 0 10px rgba(255,255,255,0.5);
+            box-shadow: inset 0 0 15px rgba(255,255,255,0.5);
         }
         #web-meter-label {
             position: absolute;
-            bottom: 55px;
+            bottom: 75px;
             left: 50%;
             transform: translateX(-50%);
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
     <div id="game-container">
         <div id="info">
-            Click to jump • Hold mouse while airborne to spin web • Space to munch!<br>
+            Click to jump • Space to spin web • Shift to munch!<br>
             Web Strands: <span id="strand-count">0</span><br>
             Flies Caught: <span id="flies-caught">0</span> | Munched: <span id="flies-munched">0</span>
         </div>
@@ -101,7 +111,7 @@
         let particles = [];
         let isDeployingWeb = false;
         let currentStrand = null;
-        let mouseIsPressed = false;
+        let spacePressed = false; // Track spacebar state
         let isMunching = false;
         
         // Web resource management
@@ -844,7 +854,8 @@
         }
 
         function setup() {
-            let canvas = createCanvas(800, 600);
+            // Use full viewport dimensions
+            let canvas = createCanvas(window.innerWidth, window.innerHeight);
             canvas.parent('game-container');
             
             skyColor1 = color(135, 206, 235);
@@ -854,8 +865,10 @@
             
             spider = new Spider(width / 2, height - 50);
             
-            // Create organic obstacles with variety
-            let numObstacles = 8;
+            // Create organic obstacles with variety - scale with viewport
+            let numObstacles = Math.floor((width * height) / 60000); // Scale based on area
+            numObstacles = constrain(numObstacles, 8, 20);
+            
             for (let i = 0; i < numObstacles; i++) {
                 let x = random(100, width - 100);
                 let y = random(100, height - 150);
@@ -864,7 +877,7 @@
                 
                 let valid = true;
                 for (let obstacle of obstacles) {
-                    if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 20) {
+                    if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 30) {
                         valid = false;
                         break;
                     }
@@ -875,17 +888,28 @@
                 }
             }
             
-            // Add guaranteed anchor points with specific types
+            // Add guaranteed anchor points with specific types - distributed across viewport
             obstacles.push(new Obstacle(50, height/2, 35, 'branch'));
             obstacles.push(new Obstacle(width - 50, height/2, 35, 'branch'));
             obstacles.push(new Obstacle(width/2, 50, 40, 'leaf'));
             obstacles.push(new Obstacle(width/4, height - 200, 30, 'leaf'));
             obstacles.push(new Obstacle(3*width/4, height - 200, 30, 'branch'));
             
+            // Add more anchor points for larger screens
+            if (width > 1200) {
+                obstacles.push(new Obstacle(width/3, height/3, 35, 'leaf'));
+                obstacles.push(new Obstacle(2*width/3, height/3, 35, 'branch'));
+            }
+            
             // Spawn initial food boxes
-            for (let i = 0; i < 3; i++) {
+            let numBoxes = Math.max(3, Math.floor(width / 400));
+            for (let i = 0; i < numBoxes; i++) {
                 spawnFoodBox();
             }
+        }
+        
+        function windowResized() {
+            resizeCanvas(window.innerWidth, window.innerHeight);
         }
 
         function draw() {
@@ -1063,25 +1087,36 @@
 
         function keyPressed() {
             if (key === ' ') {
-                spider.munch();
+                spacePressed = true;
                 return false; // Prevent page scroll
+            }
+            if (keyCode === SHIFT) {
+                spider.munch();
+                return false;
+            }
+        }
+        
+        function keyReleased() {
+            if (key === ' ') {
+                spacePressed = false;
+                isDeployingWeb = false;
+                return false;
             }
         }
 
         function mousePressed() {
-            mouseIsPressed = true;
+            // Only jump on mouse press, no web deployment
             if (!spider.isAirborne) {
                 spider.jump(mouseX, mouseY);
             }
         }
 
         function mouseReleased() {
-            mouseIsPressed = false;
-            isDeployingWeb = false;
+            // No longer needed for web deployment
         }
 
         function touchStarted() {
-            mouseIsPressed = true;
+            // Only jump on touch, no web deployment
             if (!spider.isAirborne) {
                 spider.jump(touches[0].x, touches[0].y);
             }
@@ -1089,8 +1124,7 @@
         }
 
         function touchEnded() {
-            mouseIsPressed = false;
-            isDeployingWeb = false;
+            // No longer needed for web deployment
             return false;
         }
     </script>
