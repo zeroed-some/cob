@@ -7,10 +7,50 @@ class WebStrand {
         this.strength = 1;
         this.vibration = 0;
         this.path = [];
+        this.segments = []; // For physics simulation
+        this.maxLength = 200; // Maximum strand length before it breaks
+        this.tension = 0;
+        this.broken = false;
     }
 
     update() {
         this.vibration *= 0.95;
+        
+        // Calculate strand length and tension
+        if (this.end) {
+            let length = dist(this.start.x, this.start.y, this.end.x, this.end.y);
+            this.tension = length / this.maxLength;
+            
+            // Break if overstretched or unsupported arc
+            if (this.tension > 1.5 || this.checkUnsupportedArc()) {
+                this.broken = true;
+            }
+        }
+        
+        // Apply gravity to path points for realistic sagging
+        if (this.path && this.path.length > 2 && !this.broken) {
+            for (let i = 1; i < this.path.length - 1; i++) {
+                // Don't move the anchor points
+                let point = this.path[i];
+                
+                // Check if this point is supported by anything
+                let supported = false;
+                for (let obstacle of obstacles) {
+                    if (dist(point.x, point.y, obstacle.x, obstacle.y) < obstacle.radius + 5) {
+                        supported = true;
+                        break;
+                    }
+                }
+                
+                // Apply gravity if not supported
+                if (!supported) {
+                    point.y += 0.3; // Gravity effect
+                    
+                    // Add slight pendulum motion
+                    point.x += sin(frameCount * 0.02 + i) * 0.1;
+                }
+            }
+        }
         
         for (let node of webNodes) {
             if (dist(node.x, node.y, this.start.x, this.start.y) < 5 ||
@@ -19,18 +59,57 @@ class WebStrand {
             }
         }
     }
-
-    display() {
-        push();
+    
+    checkUnsupportedArc() {
+        if (!this.path || this.path.length < 3) return false;
         
-        if (gamePhase === 'NIGHT') {
-            stroke(255, 255, 255, 250);
-            strokeWeight(2);
-        } else {
-            stroke(255, 255, 255, 200);
-            strokeWeight(1.5);
+        // Check if the web forms an unsupported arc (both ends lower than middle)
+        let startY = this.start.y;
+        let endY = this.end ? this.end.y : this.path[this.path.length - 1].y;
+        let lowestPoint = startY;
+        let highestPoint = startY;
+        
+        for (let point of this.path) {
+            if (point.y > lowestPoint) lowestPoint = point.y;
+            if (point.y < highestPoint) highestPoint = point.y;
         }
         
+        // If the arc goes up significantly and both ends are near bottom, it's unsupported
+        let arcHeight = lowestPoint - highestPoint;
+        let bothEndsLow = startY > height - 200 && endY > height - 200;
+        let significantArc = arcHeight > 100;
+        
+        // Check if there's any support in the middle
+        let hasMiddleSupport = false;
+        for (let i = Math.floor(this.path.length * 0.3); i < Math.floor(this.path.length * 0.7); i++) {
+            let point = this.path[i];
+            for (let obstacle of obstacles) {
+                if (dist(point.x, point.y, obstacle.x, obstacle.y) < obstacle.radius + 10) {
+                    hasMiddleSupport = true;
+                    break;
+                }
+            }
+            if (hasMiddleSupport) break;
+        }
+        
+        return bothEndsLow && significantArc && !hasMiddleSupport;
+    }
+
+    display() {
+        if (this.broken) return; // Don't display broken strands
+        
+        push();
+        
+        // Change color based on tension
+        if (this.tension > 0.8) {
+            stroke(255, 200, 200, 200); // Reddish when strained
+        } else if (gamePhase === 'NIGHT') {
+            stroke(255, 255, 255, 250);
+        } else {
+            stroke(255, 255, 255, 200);
+        }
+        
+        strokeWeight(gamePhase === 'NIGHT' ? 2 : 1.5);
         noFill();
         
         if (this.path && this.path.length > 2) {
@@ -60,6 +139,11 @@ class WebStrand {
             let midX = (this.start.x + this.end.x) / 2;
             let midY = (this.start.y + this.end.y) / 2 + this.vibration * sin(frameCount * 0.3);
             
+            // Add sag based on horizontal distance
+            let horizontalDist = abs(this.end.x - this.start.x);
+            let sag = horizontalDist * 0.1; // More sag for longer horizontal spans
+            midY += sag;
+            
             beginShape();
             curveVertex(this.start.x, this.start.y);
             curveVertex(this.start.x, this.start.y);
@@ -86,6 +170,7 @@ class WebStrand {
         this.vibration = min(this.vibration + amount, 10);
     }
 }
+
 
 class WebNode {
     constructor(x, y) {
