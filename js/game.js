@@ -41,7 +41,78 @@ function setup() {
     currentSkyColor1 = skyColor1;
     currentSkyColor2 = skyColor2;
     
-    spider = new Spider(width / 2, height - 50);
+    // Create home branch for spider
+    let homeBranchSide = random() < 0.5 ? 'left' : 'right';
+    let homeBranchLength = random(width * 0.33, width * 0.5);
+    let homeBranchY = random(height * 0.7, height * 0.85);
+    let homeBranchThickness = 25;
+    
+    // Generate twigs and leaves once during setup
+    let twigs = [];
+    let numTwigs = 5;
+    for (let i = 0; i < numTwigs; i++) {
+        twigs.push({
+            t: random(0.2, 0.8),
+            length: random(20, 40),
+            angle: random(-PI/3, -PI/6) * (homeBranchSide === 'right' ? -1 : 1),
+            subTwigs: [
+                { pos: 0.7, length: 5, angle: -5 },
+                { pos: 0.5, length: 4, angle: 4 }
+            ]
+        });
+    }
+    
+    let leaves = [];
+    for (let i = 0; i < 3; i++) {
+        leaves.push({
+            t: random(0.3, 0.7),
+            yOffset: random(-homeBranchThickness, -homeBranchThickness * 2),
+            rotation: random(-PI/4, PI/4),
+            width: 15,
+            height: 8
+        });
+    }
+    
+    let barkTextures = [];
+    let startX = homeBranchSide === 'left' ? -20 : width + 20;
+    let endX = homeBranchSide === 'left' ? homeBranchLength : width - homeBranchLength;
+    for (let x = Math.min(startX, endX); x < Math.max(startX, endX); x += 20) {
+        barkTextures.push({
+            x: x,
+            yOff: random(-homeBranchThickness/3, homeBranchThickness/3),
+            endYOff: random(-5, 5)
+        });
+    }
+    
+    // Store home branch info for rendering
+    window.homeBranch = {
+        side: homeBranchSide,
+        startX: startX,
+        endX: endX,
+        y: homeBranchY,
+        thickness: homeBranchThickness,
+        angle: random(-0.1, 0.1), // Slight angle for natural look
+        twigs: twigs,
+        leaves: leaves,
+        barkTextures: barkTextures
+    };
+    
+    // Place spider on the home branch
+    let spiderStartX = homeBranchSide === 'left' ? 
+        homeBranchLength * 0.8 : 
+        width - homeBranchLength * 0.8;
+    spider = new Spider(spiderStartX, homeBranchY - 15);
+    
+    // Add invisible obstacles along the branch for web anchor points
+    let numBranchAnchors = 3;
+    for (let i = 0; i < numBranchAnchors; i++) {
+        let t = (i + 1) / (numBranchAnchors + 1);
+        let x = homeBranchSide === 'left' ? 
+            homeBranchLength * t : 
+            width - homeBranchLength * t;
+        let y = homeBranchY + sin(t * PI) * 10; // Slight curve
+        obstacles.push(new Obstacle(x, y, 20, 'branch'));
+    }
     
     // Create obstacles with better distribution
     let numObstacles = Math.floor((width * height) / 60000);
@@ -252,17 +323,106 @@ function drawSkyGradient() {
         stroke(c);
         line(0, i, width, i);
     }
+    
+    // Draw home branch
+    if (window.homeBranch) {
+        push();
+        let branch = window.homeBranch;
+        
+        // Main branch
+        strokeWeight(branch.thickness);
+        if (gamePhase === 'NIGHT') {
+            stroke(30, 15, 0);
+        } else {
+            stroke(101, 67, 33);
+        }
+        
+        // Draw main branch with slight curve
+        push();
+        translate(0, branch.y);
+        rotate(branch.angle);
+        
+        let startX = branch.startX;
+        let endX = branch.endX;
+        let midX = (startX + endX) / 2;
+        let midY = sin(PI * 0.5) * 15; // Slight sag in middle
+        
+        noFill();
+        beginShape();
+        curveVertex(startX, 0);
+        curveVertex(startX, 0);
+        curveVertex(midX, midY);
+        curveVertex(endX, 0);
+        curveVertex(endX, 0);
+        endShape();
+        pop();
+        
+        // Add texture and smaller branches
+        push();
+        translate(0, branch.y);
+        rotate(branch.angle);
+        
+        // Bark texture (using pre-generated positions)
+        stroke(80, 50, 20, 100);
+        strokeWeight(2);
+        for (let texture of branch.barkTextures) {
+            line(texture.x, texture.yOff, texture.x + 10, texture.yOff + texture.endYOff);
+        }
+        
+        // Small twigs (using pre-generated positions)
+        stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
+        strokeWeight(3);
+        for (let twig of branch.twigs) {
+            let twigX = lerp(startX, endX, twig.t);
+            
+            push();
+            translate(twigX, 0);
+            rotate(twig.angle);
+            line(0, 0, twig.length, 0);
+            
+            // Tiny sub-twigs
+            strokeWeight(1);
+            for (let subTwig of twig.subTwigs) {
+                line(twig.length * subTwig.pos, 0, 
+                     twig.length * subTwig.pos + subTwig.length, 
+                     subTwig.angle);
+            }
+            pop();
+        }
+        
+        // Add leaves (using pre-generated positions)
+        fill(gamePhase === 'NIGHT' ? color(20, 40, 20) : color(34, 139, 34));
+        noStroke();
+        for (let leaf of branch.leaves) {
+            let leafX = lerp(startX, endX, leaf.t);
+            
+            push();
+            translate(leafX, leaf.yOffset);
+            rotate(leaf.rotation);
+            ellipse(0, 0, leaf.width, leaf.height);
+            pop();
+        }
+        
+        pop();
+        pop();
+    }
 }
 
 function drawMoon() {
     push();
     noStroke();
-    fill(255, 255, 230, moonOpacity);
+    // Brighter moon
+    fill(255, 255, 240, moonOpacity);
     ellipse(width - 100, moonY, 50);
-    fill(255, 255, 200, moonOpacity * 0.3);
+    // Brighter glow
+    fill(255, 255, 220, moonOpacity * 0.5);
     ellipse(width - 100, moonY, 70);
+    // Extra outer glow for more brightness
+    fill(255, 255, 200, moonOpacity * 0.2);
+    ellipse(width - 100, moonY, 100);
     
-    fill(230, 230, 200, moonOpacity * 0.5);
+    // Moon craters with better contrast
+    fill(240, 240, 210, moonOpacity * 0.7);
     ellipse(width - 105, moonY - 5, 8);
     ellipse(width - 95, moonY + 8, 12);
     ellipse(width - 110, moonY + 10, 6);
