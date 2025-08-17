@@ -365,7 +365,11 @@ class Fly {
   }
 
   update () {
-    if (this.stuck) return
+    if (this.stuck) {
+      // If stuck, check if we need to move with a drifting web
+      this.updatePositionOnWeb()
+      return
+    }
 
     if (this.caught) {
       this.vel.mult(0.95)
@@ -374,6 +378,8 @@ class Fly {
         fliesCaught++
         webSilk = min(webSilk + 5, maxWebSilk)
       }
+      // While caught but not yet stuck, also follow the web
+      this.updatePositionOnWeb()
       return
     }
 
@@ -395,6 +401,54 @@ class Fly {
 
     // Check web collisions
     this.checkWebCollisions()
+  }
+  
+  updatePositionOnWeb() {
+    // Find the web strand(s) this fly is attached to
+    for (let strand of webStrands) {
+      if (strand.broken) continue
+      
+      // Check if fly is on this strand
+      let closestPoint = null
+      let closestDistance = Infinity
+      
+      if (strand.path && strand.path.length > 1) {
+        for (let i = 0; i < strand.path.length - 1; i++) {
+          let p1 = strand.path[i]
+          let p2 = strand.path[i + 1]
+          
+          // Find closest point on this segment
+          let line = p5.Vector.sub(p2, p1)
+          let lineLength = line.mag()
+          if (lineLength === 0) continue
+          line.normalize()
+          
+          let pointToStart = p5.Vector.sub(this.pos, p1)
+          let projLength = constrain(pointToStart.dot(line), 0, lineLength)
+          
+          let projPoint = p5.Vector.add(p1, p5.Vector.mult(line, projLength))
+          let d = p5.Vector.dist(this.pos, projPoint)
+          
+          if (d < closestDistance && d < this.radius + 5) {
+            closestDistance = d
+            closestPoint = projPoint
+          }
+        }
+      }
+      
+      // If we found a close point on this strand, stick to it
+      if (closestPoint) {
+        // Move fly to follow the strand's movement
+        this.pos.x = closestPoint.x
+        this.pos.y = closestPoint.y
+        
+        // Add small vibration when on a moving web
+        if (strand.vibration > 0) {
+          this.pos.x += random(-1, 1) * strand.vibration * 0.1
+          this.pos.y += random(-1, 1) * strand.vibration * 0.1
+        }
+      }
+    }
   }
 
   checkWebCollisions () {
@@ -725,6 +779,45 @@ class Obstacle {
       if (attachedToStart || attachedToEnd) {
         // Mark strand as broken
         strand.broken = true
+        
+        // Release any flies stuck to this strand
+        for (let fly of flies) {
+          if (fly.stuck || fly.caught) {
+            // Check if fly is touching this breaking strand
+            let touchingStrand = false
+            if (strand.path && strand.path.length > 1) {
+              for (let i = 0; i < strand.path.length - 1; i++) {
+                let p1 = strand.path[i]
+                let p2 = strand.path[i + 1]
+                let d = fly.pointToLineDistance(fly.pos, p1, p2)
+                if (d < fly.radius + 5) {
+                  touchingStrand = true
+                  break
+                }
+              }
+            }
+            
+            // If fly was on this strand, release it
+            if (touchingStrand) {
+              fly.stuck = false
+              fly.caught = false
+              fly.currentSpeed = fly.baseSpeed
+              fly.touchedStrands.clear()
+              fly.slowedBy.clear()
+              // Give it a little downward velocity to start falling
+              fly.vel = createVector(random(-0.5, 0.5), 2)
+              
+              // Create release particles
+              for (let j = 0; j < 3; j++) {
+                let p = new Particle(fly.pos.x, fly.pos.y)
+                p.color = color(255, 255, 100, 150)
+                p.vel = createVector(random(-1, 1), random(0, 2))
+                p.size = 2
+                particles.push(p)
+              }
+            }
+          }
+        }
         
         // Create dramatic snap particles
         let snapX = attachedToStart ? strand.start.x : strand.end.x

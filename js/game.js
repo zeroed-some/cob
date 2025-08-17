@@ -330,6 +330,51 @@ function draw() {
                     particles.push(p);
                 }
             }
+            
+            // Check all stuck/caught flies to see if they need to be released
+            for (let fly of flies) {
+                if (fly.stuck || fly.caught) {
+                    // Check if this fly still has valid web support
+                    let hasSupport = false;
+                    for (let otherStrand of webStrands) {
+                        if (otherStrand !== strand && !otherStrand.broken) {
+                            // Check if fly is on this other strand
+                            if (otherStrand.path && otherStrand.path.length > 1) {
+                                for (let k = 0; k < otherStrand.path.length - 1; k++) {
+                                    let p1 = otherStrand.path[k];
+                                    let p2 = otherStrand.path[k + 1];
+                                    let d = fly.pointToLineDistance(fly.pos, p1, p2);
+                                    if (d < fly.radius + 5) {
+                                        hasSupport = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (hasSupport) break;
+                        }
+                    }
+                    
+                    // If no support, release the fly
+                    if (!hasSupport) {
+                        fly.stuck = false;
+                        fly.caught = false;
+                        fly.currentSpeed = fly.baseSpeed;
+                        fly.touchedStrands.clear();
+                        fly.slowedBy.clear();
+                        fly.vel = createVector(random(-0.5, 0.5), 1.5);
+                        
+                        // Yellow particles for release
+                        for (let j = 0; j < 3; j++) {
+                            let p = new Particle(fly.pos.x, fly.pos.y);
+                            p.color = color(255, 255, 0, 100);
+                            p.vel = createVector(random(-1, 1), random(0, 1));
+                            p.size = 2;
+                            particles.push(p);
+                        }
+                    }
+                }
+            }
+            
             webStrands.splice(i, 1);
         } else {
             strand.display();
