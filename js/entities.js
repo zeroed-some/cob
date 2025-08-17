@@ -86,30 +86,60 @@ class Spider {
         // Check ceiling
         if (this.pos.y <= this.radius) {
             this.pos.y = this.radius;
-            this.vel.y *= -0.5;
+            this.vel.y *= -0.5; // Bounce off ceiling, don't land
         }
         
         // Check home branch collision (one-way platform)
-        if (window.homeBranch && this.vel.y > 0) { // Only when falling
+        if (window.homeBranch && this.isAirborne && this.vel.y > 0.1) { // Only when actually falling (not just tiny velocity)
             let branch = window.homeBranch;
-            // Collision should be right at the visual surface
-            let branchTop = branch.y - 5; // Much closer to actual visual surface
             
             // Check if spider is within branch X range
-            let inXRange = false;
-            if (branch.side === 'left') {
-                inXRange = this.pos.x >= 0 && this.pos.x <= branch.endX + 20;
-            } else {
-                inXRange = this.pos.x >= branch.endX - 20 && this.pos.x <= width;
-            }
+            let branchStart = Math.min(branch.startX, branch.endX);
+            let branchEnd = Math.max(branch.startX, branch.endX);
             
-            // One-way collision: only collide when falling from above
-            if (inXRange && 
-                this.pos.y - this.radius <= branchTop && 
-                this.pos.y + this.radius >= branchTop &&
-                this.pos.y - this.radius < branchTop) {
-                this.pos.y = branchTop - this.radius;
-                this.land();
+            if (this.pos.x >= branchStart - 20 && this.pos.x <= branchEnd + 20) {
+                // Calculate position along branch (0 to 1)
+                let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
+                t = constrain(t, 0, 1);
+                
+                // Find the appropriate knob for this position
+                let knobEffect = 0;
+                let yShift = 0;
+                if (branch.knobs) {
+                    for (let knob of branch.knobs) {
+                        let knobDist = abs(t - knob.t);
+                        if (knobDist < 0.15) { // Within influence range of knob
+                            let influence = 1 - (knobDist / 0.15);
+                            knobEffect = Math.max(knobEffect, knob.topBump * influence);
+                            yShift += knob.yShift * influence;
+                        }
+                    }
+                }
+                
+                // Base thickness tapers from full at start to 30% at end
+                let baseThickness = lerp(branch.thickness * 1.2, branch.thickness * 0.3, t);
+                
+                // Add knob effect to thickness
+                let actualThickness = baseThickness + knobEffect;
+                
+                // Account for branch angle
+                let angleOffset = (this.pos.x - branchStart) * Math.tan(branch.angle);
+                
+                // The visual top of the branch (where spider should land)
+                let branchTopY = branch.y - actualThickness + angleOffset + yShift;
+                
+                // Only trigger collision if spider is actually above and close to the branch
+                // Previous position check to ensure we're coming from above
+                let prevY = this.pos.y - this.vel.y;
+                
+                if (prevY <= branchTopY && // Was above the branch
+                    this.pos.y + this.radius >= branchTopY && // Now at or below surface
+                    this.pos.y - this.radius <= branchTopY + 20 && // But not too far below
+                    this.vel.y > 0.1) { // Actually moving downward with some speed
+                    
+                    this.pos.y = branchTopY - this.radius;
+                    this.land();
+                }
             }
         }
 
