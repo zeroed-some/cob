@@ -17,69 +17,97 @@ class Spider {
     this.attachedObstacle = null // Track which obstacle spider is on
   }
 
-  jump(targetX, targetY) {
-    if (!this.canJump || this.isAirborne) return; // Don't jump if already airborne
-    
-    let direction = createVector(targetX - this.pos.x, targetY - this.pos.y);
-    let clickDistance = direction.mag();
-    direction.normalize();
-    
-    // Scale jump power based on click distance (closer clicks = smaller jumps)
-    let actualJumpPower = map(clickDistance, 0, 200, 3, this.jumpPower);
-    actualJumpPower = constrain(actualJumpPower, 3, this.jumpPower);
-    direction.mult(actualJumpPower);
-    
-    this.vel = direction;
-    this.isAirborne = true;
-    this.canJump = false;
-    this.lastAnchorPoint = this.pos.copy();
+  jump (targetX, targetY, chargeMultiplier = 1) {
+    if (!this.canJump || this.isAirborne) return
+
+    // DAWN PHASE: Check and consume stamina
+    if (gamePhase === 'DAWN') {
+      if (jumpStamina < jumpCost) {
+        // Not enough stamina to jump
+        isExhausted = true
+        return // Can't jump
+      }
+      // Consume stamina for jump
+      jumpStamina -= jumpCost
+      stats.totalJumps++
+    }
+
+    // PHASE 4B: Track wind jumps
+    if (windActive) {
+      stats.windJumps++
+      achievements.windRider.progress++
+    }
+
+    let direction = createVector(targetX - this.pos.x, targetY - this.pos.y)
+    let clickDistance = direction.mag()
+    direction.normalize()
+
+    // Apply charge multiplier if provided
+    let actualJumpPower = map(
+      clickDistance,
+      0,
+      200,
+      3,
+      this.jumpPower * chargeMultiplier
+    )
+    actualJumpPower = constrain(
+      actualJumpPower,
+      3,
+      this.jumpPower * chargeMultiplier
+    )
+    direction.mult(actualJumpPower)
+
+    this.vel = direction
+    this.isAirborne = true
+    this.canJump = false
+    this.lastAnchorPoint = this.pos.copy()
     // Record jump time for touch debounce
     if (typeof window !== 'undefined') {
-      window.lastJumpTime = millis();
+      window.lastJumpTime = millis()
     }
-    
+
     // Check if we're jumping off a web strand
     for (let strand of webStrands) {
-      if (strand === currentStrand) continue;
-      
+      if (strand === currentStrand) continue
+
       if (this.checkStrandCollision(strand)) {
         // Much simpler shimmy detection based on actual jump power used
-        let isShimmy = actualJumpPower < 6; // If we used less than half power, it's a shimmy
-        
+        let isShimmy = actualJumpPower < 6 // If we used less than half power, it's a shimmy
+
         // Apply appropriate recoil based on movement type
         if (isShimmy) {
           // Trigger shimmy visual effect
-          this.shimmyEffect = 20;
-          
+          this.shimmyEffect = 20
+
           // NO recoil at all for shimmying - just tiny vibration
-          strand.vibrate(0.3);
-          
+          strand.vibrate(0.3)
+
           // Tiny yellow particles
-          let p = new Particle(this.pos.x, this.pos.y);
-          p.color = color(255, 255, 100, 80);
-          p.vel = createVector(random(-0.3, 0.3), random(-0.3, 0.3));
-          p.size = 2;
-          particles.push(p);
+          let p = new Particle(this.pos.x, this.pos.y)
+          p.color = color(255, 255, 100, 80)
+          p.vel = createVector(random(-0.3, 0.3), random(-0.3, 0.3))
+          p.size = 2
+          particles.push(p)
         } else {
           // Scale recoil based on actual jump power
-          let recoilForce = -(actualJumpPower / this.jumpPower) * 0.08; // Scale by power ratio
-          strand.applyRecoil(recoilForce);
-          
+          let recoilForce = -(actualJumpPower / this.jumpPower) * 0.08 // Scale by power ratio
+          strand.applyRecoil(recoilForce)
+
           // Create particles only for real jumps
           for (let i = 0; i < 2; i++) {
-            let p = new Particle(this.pos.x, this.pos.y);
-            p.color = color(255, 255, 255, 120);
-            p.vel = createVector(random(-0.8, 0.8), random(1, 2));
-            p.size = 3;
-            particles.push(p);
+            let p = new Particle(this.pos.x, this.pos.y)
+            p.color = color(255, 255, 255, 120)
+            p.vel = createVector(random(-0.8, 0.8), random(1, 2))
+            p.size = 3
+            particles.push(p)
           }
         }
-        
-        break;
+
+        break
       }
     }
   }
-    
+
   munch () {
     if (this.munchCooldown > 0) return
 
@@ -109,12 +137,19 @@ class Spider {
     // If attached to a moving obstacle, move with it
     if (this.attachedObstacle && !this.isAirborne) {
       // Calculate angle from obstacle center to spider
-      let angle = atan2(this.pos.y - this.attachedObstacle.y, this.pos.x - this.attachedObstacle.x)
+      let angle = atan2(
+        this.pos.y - this.attachedObstacle.y,
+        this.pos.x - this.attachedObstacle.x
+      )
       // Keep spider on the surface of the obstacle
-      this.pos.x = this.attachedObstacle.x + cos(angle) * (this.attachedObstacle.radius + this.radius)
-      this.pos.y = this.attachedObstacle.y + sin(angle) * (this.attachedObstacle.radius + this.radius)
+      this.pos.x =
+        this.attachedObstacle.x +
+        cos(angle) * (this.attachedObstacle.radius + this.radius)
+      this.pos.y =
+        this.attachedObstacle.y +
+        sin(angle) * (this.attachedObstacle.radius + this.radius)
     }
-    
+
     if (this.isAirborne) {
       this.acc.add(this.gravity)
       this.attachedObstacle = null // Clear attachment when jumping
@@ -236,33 +271,36 @@ class Spider {
   }
 
   checkStrandCollision (strand) {
-    if (!strand || !strand.start || !strand.end) return false;
-    let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
-    return d < this.radius + 2;
+    if (!strand || !strand.start || !strand.end) return false
+    let d = this.pointToLineDistance(this.pos, strand.start, strand.end)
+    return d < this.radius + 2
   }
 
   pointToLineDistance (point, lineStart, lineEnd) {
     // Guard nulls
     if (!lineStart || !lineEnd) {
-      return Infinity;
+      return Infinity
     }
-    let line = p5.Vector.sub(lineEnd, lineStart);
-    let lineLength = line.mag();
+    let line = p5.Vector.sub(lineEnd, lineStart)
+    let lineLength = line.mag()
     // If start and end coincide, distance is to the single point
     if (lineLength === 0) {
-      return p5.Vector.dist(point, lineStart);
+      return p5.Vector.dist(point, lineStart)
     }
-    line.normalize();
-    let pointToStart = p5.Vector.sub(point, lineStart);
-    let projLength = constrain(pointToStart.dot(line), 0, lineLength);
-    let closestPoint = p5.Vector.add(lineStart, p5.Vector.mult(line, projLength));
-    return p5.Vector.dist(point, closestPoint);
+    line.normalize()
+    let pointToStart = p5.Vector.sub(point, lineStart)
+    let projLength = constrain(pointToStart.dot(line), 0, lineLength)
+    let closestPoint = p5.Vector.add(
+      lineStart,
+      p5.Vector.mult(line, projLength)
+    )
+    return p5.Vector.dist(point, closestPoint)
   }
 
   landOnObstacle (obstacle) {
     // Only land if we're actually airborne
-    if (!this.isAirborne) return;
-    
+    if (!this.isAirborne) return
+
     let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
     this.pos.x = obstacle.x + cos(angle) * (obstacle.radius + this.radius)
     this.pos.y = obstacle.y + sin(angle) * (obstacle.radius + this.radius)
@@ -272,22 +310,27 @@ class Spider {
 
   landOnStrand (strand) {
     // Only land if we're actually airborne
-    if (!this.isAirborne) return;
-    if (!strand || !strand.start || !strand.end) return;
-    let line = p5.Vector.sub(strand.end, strand.start);
-    let lineLength = line.mag();
+    if (!this.isAirborne) return
+    if (!strand || !strand.start || !strand.end) return
+    let line = p5.Vector.sub(strand.end, strand.start)
+    let lineLength = line.mag()
     if (lineLength === 0) {
       // Degenerate strand; snap to start
-      this.pos = strand.start.copy ? strand.start.copy() : createVector(strand.start.x, strand.start.y);
+      this.pos = strand.start.copy
+        ? strand.start.copy()
+        : createVector(strand.start.x, strand.start.y)
     } else {
-      line.normalize();
-      let pointToStart = p5.Vector.sub(this.pos, strand.start);
-      let projLength = constrain(pointToStart.dot(line), 0, lineLength);
-      let closestPoint = p5.Vector.add(strand.start, p5.Vector.mult(line, projLength));
-      this.pos = closestPoint;
+      line.normalize()
+      let pointToStart = p5.Vector.sub(this.pos, strand.start)
+      let projLength = constrain(pointToStart.dot(line), 0, lineLength)
+      let closestPoint = p5.Vector.add(
+        strand.start,
+        p5.Vector.mult(line, projLength)
+      )
+      this.pos = closestPoint
     }
-    this.attachedObstacle = null; // Not on an obstacle
-    this.land();
+    this.attachedObstacle = null // Not on an obstacle
+    this.land()
   }
 
   land () {
@@ -297,13 +340,13 @@ class Spider {
 
     if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
       // Ensure the strand has a valid end and a final node on landing
-      currentStrand.end = this.pos.copy();
+      currentStrand.end = this.pos.copy()
       if (!currentStrand.path || currentStrand.path.length === 0) {
-          currentStrand.path = [this.pos.copy()];
+        currentStrand.path = [this.pos.copy()]
       } else {
-          currentStrand.path.push(this.pos.copy());
+        currentStrand.path.push(this.pos.copy())
       }
-      webNodes.push(new WebNode(this.pos.x, this.pos.y));
+      webNodes.push(new WebNode(this.pos.x, this.pos.y))
     }
 
     currentStrand = null
@@ -421,46 +464,46 @@ class Fly {
     // Check web collisions
     this.checkWebCollisions()
   }
-  
-  updatePositionOnWeb() {
+
+  updatePositionOnWeb () {
     // Find the web strand(s) this fly is attached to
     for (let strand of webStrands) {
       if (strand.broken) continue
-      
+
       // Check if fly is on this strand
       let closestPoint = null
       let closestDistance = Infinity
-      
+
       if (strand.path && strand.path.length > 1) {
         for (let i = 0; i < strand.path.length - 1; i++) {
           let p1 = strand.path[i]
           let p2 = strand.path[i + 1]
-          
+
           // Find closest point on this segment
           let line = p5.Vector.sub(p2, p1)
           let lineLength = line.mag()
           if (lineLength === 0) continue
           line.normalize()
-          
+
           let pointToStart = p5.Vector.sub(this.pos, p1)
           let projLength = constrain(pointToStart.dot(line), 0, lineLength)
-          
+
           let projPoint = p5.Vector.add(p1, p5.Vector.mult(line, projLength))
           let d = p5.Vector.dist(this.pos, projPoint)
-          
+
           if (d < closestDistance && d < this.radius + 5) {
             closestDistance = d
             closestPoint = projPoint
           }
         }
       }
-      
+
       // If we found a close point on this strand, stick to it
       if (closestPoint) {
         // Move fly to follow the strand's movement
         this.pos.x = closestPoint.x
         this.pos.y = closestPoint.y
-        
+
         // Add small vibration when on a moving web
         if (strand.vibration > 0) {
           this.pos.x += random(-1, 1) * strand.vibration * 0.1
@@ -470,105 +513,78 @@ class Fly {
     }
   }
 
-  checkWebCollisions () {
-    let currentlyTouching = new Set()
+    checkWebCollisions() {
+    let currentlyTouching = new Set();
 
     for (let strand of webStrands) {
-      let touching = false
+      let touching = false;
 
       // Check collision with strand path
       if (strand.path && strand.path.length > 1) {
-        for (let i = 0; i < strand.path.length - 1; i++) {
-          let p1 = strand.path[i]
-          let p2 = strand.path[i + 1]
-          let d = this.pointToLineDistance(this.pos, p1, p2)
+        // OPTIMIZATION: Skip every other point for collision detection
+        for (let i = 0; i < strand.path.length - 1; i += 2) {
+          let p1 = strand.path[i];
+          let p2 = strand.path[Math.min(i + 1, strand.path.length - 1)];
+          let d = this.pointToLineDistance(this.pos, p1, p2);
           if (d < this.radius + 3) {
-            touching = true
-            break
+            touching = true;
+            break;
           }
         }
       } else if (strand.start && strand.end) {
         // Fallback for strands without path
-        let d = this.pointToLineDistance(this.pos, strand.start, strand.end)
+        let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
         if (d < this.radius + 3) {
-          touching = true
+          touching = true;
         }
       }
 
       if (touching) {
-        currentlyTouching.add(strand)
+        currentlyTouching.add(strand);
 
         // If this is a new strand we're touching
         if (!this.touchedStrands.has(strand)) {
-          this.touchedStrands.add(strand)
+          this.touchedStrands.add(strand);
 
           // Vibrate the web when first touching
-          strand.vibrate(3)
+          strand.vibrate(3);
 
           // First strand slows us down
           if (this.touchedStrands.size === 1) {
-            this.currentSpeed = this.baseSpeed * 0.4 // Slow to 40% speed
-            this.slowedBy.add(strand)
+            this.currentSpeed = this.baseSpeed * 0.4; // Slow to 40% speed
+            this.slowedBy.add(strand);
 
             // Visual feedback - yellow particles for slowing
-            for (let j = 0; j < 3; j++) {
-              let p = new Particle(this.pos.x, this.pos.y)
-              p.color = color(255, 255, 0, 150)
-              p.vel = createVector(random(-1, 1), random(-1, 1))
-              p.size = 3
-              particles.push(p)
+            // LIMIT PARTICLES TO PREVENT FREEZE
+            let particleCount = Math.min(3, 100 - particles.length);
+            for (let j = 0; j < particleCount; j++) {
+              let p = new Particle(this.pos.x, this.pos.y);
+              p.color = color(255, 255, 0, 150);
+              p.vel = createVector(random(-1, 1), random(-1, 1));
+              p.size = 3;
+              particles.push(p);
             }
           }
           // Second strand catches us
           else if (this.touchedStrands.size >= 2 && !this.caught) {
-            this.caught = true
-            this.currentSpeed = 0
+            this.caught = true;
+            this.currentSpeed = 0;
 
             // Stronger vibration when caught
-            strand.vibrate(8)
+            strand.vibrate(8);
 
-            // Also vibrate nearby strands
-            for (let otherStrand of webStrands) {
-              if (otherStrand !== strand) {
-                for (let touchedStrand of this.touchedStrands) {
-                  let d1 = dist(
-                    otherStrand.start.x,
-                    otherStrand.start.y,
-                    touchedStrand.start.x,
-                    touchedStrand.start.y
-                  )
-                  let d2 = dist(
-                    otherStrand.start.x,
-                    otherStrand.start.y,
-                    touchedStrand.end.x,
-                    touchedStrand.end.y
-                  )
-                  let d3 = dist(
-                    otherStrand.end.x,
-                    otherStrand.end.y,
-                    touchedStrand.start.x,
-                    touchedStrand.start.y
-                  )
-                  let d4 = dist(
-                    otherStrand.end.x,
-                    otherStrand.end.y,
-                    touchedStrand.end.x,
-                    touchedStrand.end.y
-                  )
-                  if (min(d1, d2, d3, d4) < 50) {
-                    otherStrand.vibrate(2)
-                    break
-                  }
-                }
-              }
-            }
+            // FIX: OPTIMIZE NEARBY STRAND VIBRATION
+            // This is likely the main cause of the freeze - checking distances between all strands
+            // Use a more efficient method
+            propagateVibration(strand, 2);
 
-            // Create caught particles
-            for (let j = 0; j < 6; j++) {
-              let p = new Particle(this.pos.x, this.pos.y)
-              p.color = color(255, 200, 0, 200)
-              p.vel = createVector(random(-2, 2), random(-2, 2))
-              particles.push(p)
+            // Create caught particles - LIMIT TO PREVENT FREEZE
+            let particleCount = Math.min(6, 100 - particles.length);
+            for (let j = 0; j < particleCount; j++) {
+              let p = new Particle(this.pos.x, this.pos.y);
+              p.color = color(255, 200, 0, 200);
+              p.vel = createVector(random(-2, 2), random(-2, 2));
+              particles.push(p);
             }
           }
         }
@@ -577,24 +593,32 @@ class Fly {
 
     // If we're no longer touching strands we were slowed by, speed back up
     if (this.slowedBy.size > 0 && currentlyTouching.size === 0) {
-      this.currentSpeed = this.baseSpeed
-      this.slowedBy.clear()
+      this.currentSpeed = this.baseSpeed;
+      this.slowedBy.clear();
     }
   }
 
-  pointToLineDistance (point, lineStart, lineEnd) {
-    let line = p5.Vector.sub(lineEnd, lineStart)
-    let lineLength = line.mag()
-    line.normalize()
-
-    let pointToStart = p5.Vector.sub(point, lineStart)
-    let projLength = constrain(pointToStart.dot(line), 0, lineLength)
-
-    let closestPoint = p5.Vector.add(
-      lineStart,
-      p5.Vector.mult(line, projLength)
-    )
-    return p5.Vector.dist(point, closestPoint)
+  pointToLineDistance(point, lineStart, lineEnd) {
+    // Add null checks
+    if (!point || !lineStart || !lineEnd) return Infinity;
+    
+    let dx = lineEnd.x - lineStart.x;
+    let dy = lineEnd.y - lineStart.y;
+    let lineLength = sqrt(dx * dx + dy * dy);
+    
+    // If line has no length, return distance to point
+    if (lineLength < 0.01) {
+      return dist(point.x, point.y, lineStart.x, lineStart.y);
+    }
+    
+    // Use optimized calculation without creating new vectors
+    let t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (lineLength * lineLength);
+    t = constrain(t, 0, 1);
+    
+    let closestX = lineStart.x + t * dx;
+    let closestY = lineStart.y + t * dy;
+    
+    return dist(point.x, point.y, closestX, closestY);
   }
 
   display () {
@@ -623,7 +647,6 @@ class Fly {
     ellipse(0, 0, this.radius * 2)
 
     if (!this.stuck) {
-      this.wingPhase += 0.5
       // Wing animation slows down when slowed
       let wingSpeed = this.slowedBy.size > 0 ? 0.25 : 0.5
       this.wingPhase += wingSpeed
@@ -656,35 +679,34 @@ class Obstacle {
     this.type = type || 'leaf'
     this.rotation = random(TWO_PI)
     this.leafPoints = []
-    
+
     // Movement properties for all types
     this.bobOffset = random(TWO_PI)
     this.bobSpeed = random(0.02, 0.04)
     this.bobAmount = 0
-    
+
     // Type-specific initialization
     if (this.type === 'balloon') {
       this.bobAmount = 8 // Balloons bob more
       this.balloonColors = [
         color(255, 100, 100), // Red
-        color(100, 200, 255), // Blue  
-        color(255, 200, 100)  // Yellow
+        color(100, 200, 255), // Blue
+        color(255, 200, 100) // Yellow
       ]
       this.balloonColor = random(this.balloonColors)
       this.stringWave = 0
       this.antLegPhase = random(TWO_PI)
-      
     } else if (this.type === 'beetle') {
       this.bobAmount = 4
       this.driftSpeed = random(0.15, 0.35)
       this.driftAngle = random(TWO_PI)
       this.driftChangeRate = random(0.005, 0.015)
       this.wingPhase = random(TWO_PI)
-      this.beetleColor = random() < 0.5 ? 
-        color(20, 60, 20) : // Dark green
-        color(40, 20, 60)   // Purple
+      this.beetleColor =
+        random() < 0.5
+          ? color(20, 60, 20) // Dark green
+          : color(40, 20, 60) // Purple
       this.driftDistance = 0 // Track total drift
-        
     } else if (this.type === 'leaf') {
       this.bobAmount = 2 // Leaves bob slightly
       let numPoints = 8
@@ -699,12 +721,12 @@ class Obstacle {
       this.bobAmount = 0
     }
   }
-  
-  update() {
+
+  update () {
     // Bobbing motion for all types
     let bob = sin(frameCount * this.bobSpeed + this.bobOffset) * this.bobAmount
     this.y = this.originalY + bob
-    
+
     // Beetle-specific drift
     if (this.type === 'beetle') {
       // Store initial position if not set
@@ -712,44 +734,52 @@ class Obstacle {
         this.initialX = this.x
         this.initialY = this.y
       }
-      
+
       // Slowly change drift direction using Perlin noise
-      this.driftAngle += (noise(frameCount * this.driftChangeRate, this.originalX * 0.01) - 0.5) * 0.1
-      
+      this.driftAngle +=
+        (noise(frameCount * this.driftChangeRate, this.originalX * 0.01) -
+          0.5) *
+        0.1
+
       // Apply drift to original position
       this.originalX += cos(this.driftAngle) * this.driftSpeed
       this.originalY += sin(this.driftAngle) * this.driftSpeed * 0.5
-      
+
       // Calculate total drift distance from initial position
-      this.driftDistance = dist(this.originalX, this.originalY, this.initialX, this.initialY)
-      
+      this.driftDistance = dist(
+        this.originalX,
+        this.originalY,
+        this.initialX,
+        this.initialY
+      )
+
       // Keep beetles on screen with soft boundaries
       if (this.originalX < 80) {
-        this.driftAngle = random(-PI/4, PI/4)
+        this.driftAngle = random(-PI / 4, PI / 4)
         this.originalX = 80
       }
       if (this.originalX > width - 80) {
-        this.driftAngle = random(3*PI/4, 5*PI/4)
+        this.driftAngle = random((3 * PI) / 4, (5 * PI) / 4)
         this.originalX = width - 80
       }
       if (this.originalY < 80) {
-        this.driftAngle = random(-3*PI/4, -PI/4)
+        this.driftAngle = random((-3 * PI) / 4, -PI / 4)
         this.originalY = 80
       }
       if (this.originalY > height - 150) {
-        this.driftAngle = random(PI/4, 3*PI/4)
+        this.driftAngle = random(PI / 4, (3 * PI) / 4)
         this.originalY = height - 150
       }
-      
+
       // Update actual position (with bob already applied to y)
       this.x = this.originalX
-      
+
       // Check if beetle has drifted too far and break attached strands
       if (this.driftDistance > 100) {
         this.breakAttachedStrands()
       }
     }
-    
+
     // Update animation phases
     if (this.type === 'balloon') {
       this.stringWave = sin(frameCount * 0.05 + this.bobOffset) * 0.1
@@ -757,18 +787,21 @@ class Obstacle {
     } else if (this.type === 'beetle') {
       this.wingPhase += 0.15
     }
-    
+
     // For all moving obstacles, update any attached web strands
     if (this.bobAmount > 0 || this.type === 'beetle') {
       this.updateAttachedStrands()
     }
   }
-  
-  updateAttachedStrands() {
+
+  updateAttachedStrands () {
     // Update web strands that are connected to this obstacle
     for (let strand of webStrands) {
       // Check if strand starts at this obstacle
-      if (dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10) {
+      if (
+        dist(strand.start.x, strand.start.y, this.x, this.y) <
+        this.radius + 10
+      ) {
         strand.start.x = this.x
         strand.start.y = this.y
         if (strand.path && strand.path.length > 0) {
@@ -776,9 +809,12 @@ class Obstacle {
           strand.path[0].y = this.y
         }
       }
-      
+
       // Check if strand ends at this obstacle
-      if (strand.end && dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10) {
+      if (
+        strand.end &&
+        dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
+      ) {
         strand.end.x = this.x
         strand.end.y = this.y
         if (strand.path && strand.path.length > 0) {
@@ -788,26 +824,29 @@ class Obstacle {
       }
     }
   }
-  
-  breakAttachedStrands() {
+
+  breakAttachedStrands () {
     // Break any strands attached to this beetle that has drifted too far
     for (let strand of webStrands) {
-      let attachedToStart = dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10
-      let attachedToEnd = strand.end && dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
-      
+      let attachedToStart =
+        dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10
+      let attachedToEnd =
+        strand.end &&
+        dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
+
       if (attachedToStart || attachedToEnd) {
         // Mark strand as broken
         strand.broken = true
-        
+
         // Release any flies stuck to this strand
         for (let fly of flies) {
           if (fly.stuck || fly.caught) {
             // Check if fly is touching this breaking strand
             let touchingStrand = false
             if (strand.path && strand.path.length > 1) {
-              for (let i = 0; i < strand.path.length - 1; i++) {
-                let p1 = strand.path[i]
-                let p2 = strand.path[i + 1]
+              for (let k = 0; k < strand.path.length - 1; k++) {
+                let p1 = strand.path[k]
+                let p2 = strand.path[k + 1]
                 let d = fly.pointToLineDistance(fly.pos, p1, p2)
                 if (d < fly.radius + 5) {
                   touchingStrand = true
@@ -815,7 +854,7 @@ class Obstacle {
                 }
               }
             }
-            
+
             // If fly was on this strand, release it
             if (touchingStrand) {
               fly.stuck = false
@@ -825,7 +864,7 @@ class Obstacle {
               fly.slowedBy.clear()
               // Give it a little downward velocity to start falling
               fly.vel = createVector(random(-0.5, 0.5), 2)
-              
+
               // Create release particles
               for (let j = 0; j < 3; j++) {
                 let p = new Particle(fly.pos.x, fly.pos.y)
@@ -837,11 +876,11 @@ class Obstacle {
             }
           }
         }
-        
+
         // Create dramatic snap particles
         let snapX = attachedToStart ? strand.start.x : strand.end.x
         let snapY = attachedToStart ? strand.start.y : strand.end.y
-        
+
         // Red/pink particles for the snap
         for (let i = 0; i < 8; i++) {
           let p = new Particle(snapX, snapY)
@@ -850,7 +889,7 @@ class Obstacle {
           p.size = random(4, 8)
           particles.push(p)
         }
-        
+
         // White strand particles
         for (let i = 0; i < 4; i++) {
           let p = new Particle(snapX, snapY)
@@ -859,7 +898,7 @@ class Obstacle {
           p.size = 3
           particles.push(p)
         }
-        
+
         // Reset beetle drift after breaking strands
         this.initialX = this.x
         this.initialY = this.y
@@ -871,11 +910,11 @@ class Obstacle {
   display () {
     push()
     translate(this.x, this.y)
-    
+
     if (this.type === 'balloon') {
       // Hot air balloon with canvas texture!
       push()
-      
+
       // String/rope first (behind balloon)
       stroke(80, 60, 40)
       strokeWeight(1.5)
@@ -888,12 +927,12 @@ class Obstacle {
         curveVertex(stringX, stringY)
       }
       endShape()
-      
+
       // Balloon shadow
       noStroke()
       fill(0, 0, 0, 30)
       ellipse(5, 5, this.radius * 2.2, this.radius * 2.5)
-      
+
       // Main balloon with canvas panels
       push()
       // Draw vertical panels for that classic hot air balloon look
@@ -901,49 +940,66 @@ class Obstacle {
       for (let i = 0; i < numPanels; i++) {
         let angle1 = (TWO_PI / numPanels) * i
         let angle2 = (TWO_PI / numPanels) * (i + 1)
-        
+
         // Alternate panel colors for striped effect
         if (i % 2 === 0) {
-          fill(red(this.balloonColor), green(this.balloonColor), blue(this.balloonColor), 200)
+          fill(
+            red(this.balloonColor),
+            green(this.balloonColor),
+            blue(this.balloonColor),
+            200
+          )
         } else {
           fill(
-            red(this.balloonColor) - 30, 
-            green(this.balloonColor) - 30, 
-            blue(this.balloonColor) - 30, 
+            red(this.balloonColor) - 30,
+            green(this.balloonColor) - 30,
+            blue(this.balloonColor) - 30,
             200
           )
         }
-        
+
         // Draw tapered panel (wider at middle, narrow at top/bottom)
         beginShape()
         // Top point
         vertex(0, -this.radius * 1.2)
         // Upper curve
         bezierVertex(
-          cos(angle1) * this.radius * 0.3, -this.radius * 0.9,
-          cos(angle1) * this.radius * 0.8, -this.radius * 0.3,
-          cos(angle1) * this.radius * 1.1, 0
+          cos(angle1) * this.radius * 0.3,
+          -this.radius * 0.9,
+          cos(angle1) * this.radius * 0.8,
+          -this.radius * 0.3,
+          cos(angle1) * this.radius * 1.1,
+          0
         )
         // Lower curve to bottom
         bezierVertex(
-          cos(angle1) * this.radius * 0.9, this.radius * 0.5,
-          cos(angle1) * this.radius * 0.4, this.radius * 0.9,
-          0, this.radius * 1.1
+          cos(angle1) * this.radius * 0.9,
+          this.radius * 0.5,
+          cos(angle1) * this.radius * 0.4,
+          this.radius * 0.9,
+          0,
+          this.radius * 1.1
         )
         // Back up the other side
         bezierVertex(
-          cos(angle2) * this.radius * 0.4, this.radius * 0.9,
-          cos(angle2) * this.radius * 0.9, this.radius * 0.5,
-          cos(angle2) * this.radius * 1.1, 0
+          cos(angle2) * this.radius * 0.4,
+          this.radius * 0.9,
+          cos(angle2) * this.radius * 0.9,
+          this.radius * 0.5,
+          cos(angle2) * this.radius * 1.1,
+          0
         )
         bezierVertex(
-          cos(angle2) * this.radius * 0.8, -this.radius * 0.3,
-          cos(angle2) * this.radius * 0.3, -this.radius * 0.9,
-          0, -this.radius * 1.2
+          cos(angle2) * this.radius * 0.8,
+          -this.radius * 0.3,
+          cos(angle2) * this.radius * 0.3,
+          -this.radius * 0.9,
+          0,
+          -this.radius * 1.2
         )
         endShape(CLOSE)
       }
-      
+
       // Panel seams/ropes
       stroke(60, 40, 20, 100)
       strokeWeight(0.5)
@@ -954,24 +1010,35 @@ class Obstacle {
         noFill()
         vertex(0, -this.radius * 1.2)
         bezierVertex(
-          cos(angle) * this.radius * 0.3, -this.radius * 0.9,
-          cos(angle) * this.radius * 0.8, -this.radius * 0.3,
-          cos(angle) * this.radius * 1.1, 0
+          cos(angle) * this.radius * 0.3,
+          -this.radius * 0.9,
+          cos(angle) * this.radius * 0.8,
+          -this.radius * 0.3,
+          cos(angle) * this.radius * 1.1,
+          0
         )
         bezierVertex(
-          cos(angle) * this.radius * 0.9, this.radius * 0.5,
-          cos(angle) * this.radius * 0.4, this.radius * 0.9,
-          0, this.radius * 1.1
+          cos(angle) * this.radius * 0.9,
+          this.radius * 0.5,
+          cos(angle) * this.radius * 0.4,
+          this.radius * 0.9,
+          0,
+          this.radius * 1.1
         )
         endShape()
       }
-      
+
       // Highlight on balloon
       noStroke()
       fill(255, 255, 255, 80)
-      ellipse(-this.radius * 0.3, -this.radius * 0.5, this.radius * 0.6, this.radius * 0.7)
+      ellipse(
+        -this.radius * 0.3,
+        -this.radius * 0.5,
+        this.radius * 0.6,
+        this.radius * 0.7
+      )
       pop()
-      
+
       // FLAME EFFECT!
       push()
       translate(0, this.radius - 5)
@@ -988,14 +1055,21 @@ class Obstacle {
       translate(0, -2)
       beginShape()
       vertex(-3, 0)
-      bezierVertex(-3, -flameHeight * 0.7, -1, -flameHeight, 0, -flameHeight * 1.2)
+      bezierVertex(
+        -3,
+        -flameHeight * 0.7,
+        -1,
+        -flameHeight,
+        0,
+        -flameHeight * 1.2
+      )
       bezierVertex(1, -flameHeight, 3, -flameHeight * 0.7, 3, 0)
       endShape(CLOSE)
       fill(255, 255, 200)
       ellipse(0, -flameHeight * 0.5, 3, 4)
       pop()
       pop()
-      
+
       // Basket
       push()
       translate(0, this.radius + 10)
@@ -1022,7 +1096,7 @@ class Obstacle {
       strokeWeight(1.5)
       line(-8, 0, 8, 0)
       pop()
-      
+
       // Ant in basket (peeking over edge)
       push()
       translate(0, this.radius + 12)
@@ -1040,25 +1114,24 @@ class Obstacle {
       line(-3, 0, -4, 2)
       line(3, 0, 4, 2)
       pop()
-      
+
       pop()
-      
     } else if (this.type === 'beetle') {
       // Big floating beetle!
       push()
       rotate(this.rotation)
-      
+
       // Shadow
       noStroke()
       fill(0, 0, 0, 40)
       ellipse(3, 3, this.radius * 1.8, this.radius * 2.2)
-      
+
       // Wings - always visible and flapping since they're floating
       push()
       // Wing flap animation
       let wingAngle = sin(this.wingPhase) * 0.3
       let wingSpread = 15 + sin(this.wingPhase) * 10
-      
+
       // Left wing
       push()
       translate(-this.radius * 0.4, 0)
@@ -1072,7 +1145,7 @@ class Obstacle {
       fill(200, 200, 200, 80)
       ellipse(-wingSpread * 0.6, 0, wingSpread * 0.8, 10)
       pop()
-      
+
       // Right wing
       push()
       translate(this.radius * 0.4, 0)
@@ -1086,7 +1159,7 @@ class Obstacle {
       fill(200, 200, 200, 80)
       ellipse(wingSpread * 0.6, 0, wingSpread * 0.8, 10)
       pop()
-      
+
       // Extra glow at night
       if (gamePhase === 'NIGHT') {
         noStroke()
@@ -1094,22 +1167,26 @@ class Obstacle {
         ellipse(0, 0, this.radius * 3, this.radius * 2)
       }
       pop()
-      
+
       // Main beetle body (on top of wings)
-      fill(red(this.beetleColor), green(this.beetleColor), blue(this.beetleColor))
+      fill(
+        red(this.beetleColor),
+        green(this.beetleColor),
+        blue(this.beetleColor)
+      )
       stroke(0)
       strokeWeight(2)
       ellipse(0, 0, this.radius * 1.6, this.radius * 2)
-      
+
       // Shell split line
       stroke(0)
       strokeWeight(1)
       line(0, -this.radius, 0, this.radius)
-      
+
       // Head
       fill(10)
       ellipse(0, -this.radius * 0.8, this.radius * 0.8, this.radius * 0.6)
-      
+
       // Spots/pattern
       noStroke()
       fill(0, 0, 0, 80)
@@ -1117,22 +1194,42 @@ class Obstacle {
       ellipse(this.radius * 0.3, -this.radius * 0.2, this.radius * 0.3)
       ellipse(this.radius * 0.2, this.radius * 0.4, this.radius * 0.35)
       ellipse(-this.radius * 0.25, this.radius * 0.3, this.radius * 0.25)
-      
+
       // No legs - they're flying!
       // Just small leg stubs tucked under the body
       stroke(0)
       strokeWeight(1)
       // Tiny tucked legs
-      line(-this.radius * 0.5, -this.radius * 0.2, -this.radius * 0.6, -this.radius * 0.1)
-      line(this.radius * 0.5, -this.radius * 0.2, this.radius * 0.6, -this.radius * 0.1)
-      line(-this.radius * 0.5, this.radius * 0.2, -this.radius * 0.6, this.radius * 0.1)
-      line(this.radius * 0.5, this.radius * 0.2, this.radius * 0.6, this.radius * 0.1)
-      
+      line(
+        -this.radius * 0.5,
+        -this.radius * 0.2,
+        -this.radius * 0.6,
+        -this.radius * 0.1
+      )
+      line(
+        this.radius * 0.5,
+        -this.radius * 0.2,
+        this.radius * 0.6,
+        -this.radius * 0.1
+      )
+      line(
+        -this.radius * 0.5,
+        this.radius * 0.2,
+        -this.radius * 0.6,
+        this.radius * 0.1
+      )
+      line(
+        this.radius * 0.5,
+        this.radius * 0.2,
+        this.radius * 0.6,
+        this.radius * 0.1
+      )
+
       // Antennae
       strokeWeight(1)
       line(-3, -this.radius * 1.1, -8, -this.radius * 1.4)
       line(3, -this.radius * 1.1, 8, -this.radius * 1.4)
-      
+
       // Eyes (bigger and more prominent)
       fill(255, 0, 0)
       noStroke()
@@ -1142,13 +1239,12 @@ class Obstacle {
       fill(255, 150, 150)
       ellipse(-4, -this.radius * 0.72, 2)
       ellipse(6, -this.radius * 0.72, 2)
-      
+
       pop()
-      
     } else if (this.type === 'leaf') {
       // Original leaf code
       rotate(this.rotation)
-      
+
       if (gamePhase === 'NIGHT') {
         fill(20, 40, 20)
         stroke(10, 20, 10)
@@ -1183,11 +1279,10 @@ class Obstacle {
       line(0, 0, this.radius / 2, -this.radius / 2)
       line(0, 0, -this.radius / 2, this.radius / 2)
       line(0, 0, this.radius / 2, this.radius / 2)
-      
     } else if (this.type === 'branch') {
       // Keep old branch code for backwards compatibility
       rotate(this.rotation)
-      
+
       if (gamePhase === 'NIGHT') {
         stroke(40, 20, 0)
         fill(50, 25, 5)
@@ -1273,6 +1368,512 @@ class FoodBox {
     ellipse(5, -4, 3)
     ellipse(-4, 5, 3)
     ellipse(4, 4, 4)
+
+    pop()
+  }
+}
+
+class Bird {
+    constructor(pattern, isThief = false) {
+        this.pattern = pattern; // 'dive', 'swoop', 'glide', 'circle'
+        this.isThief = isThief;
+        this.active = false;
+        this.attacking = false;
+        this.attackDelay = isThief ? 120 : random(30, 90); // MUCH shorter initial delay
+        
+        // Position and movement
+        this.x = random(width);
+        this.y = -50; // Start above screen
+        this.vx = 0;
+        this.vy = 0;
+        this.targetX = 0;
+        this.targetY = 0;
+        this.speed = 5; // Increased from 3
+        this.angle = 0;
+        this.wingPhase = random(TWO_PI);
+        
+        // Visual properties
+        this.size = isThief ? 25 : 20;
+        this.color = isThief ? color(100, 50, 150) : color(50, 50, 50);
+        
+        // Pattern-specific properties
+        if (pattern === 'circle') {
+            this.circleRadius = 150;
+            this.circleAngle = 0;
+            this.circleCenter = createVector(width/2, height/2);
+        }
+        
+        // Attack properties - MUCH MORE AGGRESSIVE
+        this.diveSpeed = 12; // Increased from 8
+        this.retreatSpeed = 6; // Increased from 4
+        this.state = 'waiting'; // 'waiting', 'approaching', 'attacking', 'retreating'
+        this.consecutiveAttacks = 0; // Track multiple attacks
+        this.maxConsecutiveAttacks = random(2, 4); // Each bird does 2-4 attacks before retreating
+    }
+    
+    update() {
+        // Update wing animation
+        this.wingPhase += 0.3; // Faster wing flapping
+        
+        // Countdown to attack - MUCH FASTER
+        if (this.attackDelay > 0) {
+            this.attackDelay--;
+            // Hover while waiting - more aggressive hovering
+            this.y = -30 + sin(frameCount * 0.08) * 15;
+            this.x += sin(frameCount * 0.05) * 3;
+            
+            // Show warning when about to attack
+            if (this.attackDelay < 30) {
+                this.y = lerp(this.y, 50, 0.1); // Start moving into view
+            }
+            return;
+        }
+        
+        // Activate after delay
+        if (!this.active) {
+            this.active = true;
+            this.state = 'approaching';
+            this.updateTarget(); // Set initial target
+        }
+        
+        // Execute movement pattern
+        switch(this.pattern) {
+            case 'dive':
+                this.executeDivePattern();
+                break;
+            case 'swoop':
+                this.executeSwoopPattern();
+                break;
+            case 'glide':
+                this.executeGlidePattern();
+                break;
+            case 'circle':
+                this.executeCirclePattern();
+                break;
+        }
+        
+        // Check collisions
+        this.checkCollisions();
+        
+        // Keep on screen during approach
+        if (this.state === 'approaching') {
+            this.x = constrain(this.x, 20, width - 20);
+        }
+    }
+    
+    updateTarget() {
+        if (this.isThief) {
+            // Target caught flies
+            let caughtFlies = flies.filter(f => f.stuck || f.caught);
+            if (caughtFlies.length > 0) {
+                let target = random(caughtFlies);
+                this.targetX = target.pos.x;
+                this.targetY = target.pos.y;
+            } else {
+                this.active = false; // No targets, deactivate
+                return;
+            }
+        } else {
+            // Heavily favor targeting spider (90% chance)
+            if (random() < 0.9) {
+                // Target spider with prediction
+                this.targetX = spider.pos.x + spider.vel.x * 10; // Predict where spider will be
+                this.targetY = spider.pos.y + spider.vel.y * 10;
+            } else {
+                // Occasionally target a web strand
+                if (webStrands.length > 0) {
+                    let strand = random(webStrands.filter(s => !s.broken));
+                    if (strand && strand.path && strand.path.length > 0) {
+                        let point = random(strand.path);
+                        this.targetX = point.x;
+                        this.targetY = point.y;
+                    }
+                }
+            }
+        }
+    }
+    
+    executeDivePattern() {
+        if (this.state === 'approaching') {
+            // Move into position above target MUCH FASTER
+            let dx = this.targetX - this.x;
+            let dy = 50 - this.y; // Lower starting position for faster attack
+            
+            this.x += dx * 0.15; // Much faster positioning
+            this.y += dy * 0.15;
+            
+            // When in position, start diving immediately
+            if (abs(dx) < 50 && abs(dy) < 30) {
+                this.state = 'attacking';
+                this.attacking = true;
+                this.updateTarget(); // Update target position for more accurate dive
+            }
+        } else if (this.state === 'attacking') {
+            // FAST dive toward target
+            let dx = this.targetX - this.x;
+            this.vy = this.diveSpeed;
+            this.vx = dx * 0.05; // Track horizontally too
+            this.x += this.vx;
+            this.y += this.vy;
+            
+            // Hit ground or passed target
+            if (this.y > this.targetY + 20 || this.y > height - 50) {
+                this.consecutiveAttacks++;
+                
+                // Do multiple attacks before retreating
+                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+                    // Quick pull up and attack again
+                    this.state = 'approaching';
+                    this.attacking = false;
+                    this.y = min(this.y, height - 100); // Don't go too low
+                    this.updateTarget(); // Get new target position
+                } else {
+                    // Finally retreat after multiple attacks
+                    this.state = 'retreating';
+                    this.attacking = false;
+                }
+            }
+        } else if (this.state === 'retreating') {
+            // Fly back up faster
+            this.vy = -this.retreatSpeed;
+            this.y += this.vy;
+            this.x += sin(frameCount * 0.1) * 2; // Weave while retreating
+            
+            // Reset when off screen
+            if (this.y < -50) {
+                this.state = 'approaching';
+                this.attackDelay = random(60, 120); // Shorter delay between attack runs
+                this.x = random(width);
+                this.consecutiveAttacks = 0; // Reset attack counter
+                this.maxConsecutiveAttacks = random(2, 4); // Randomize next attack count
+            }
+        }
+    }
+    
+    executeSwoopPattern() {
+        if (this.state === 'approaching') {
+            // Come from the side FAST
+            if (this.x < 0) {
+                this.x += 8; // Faster approach
+                this.y = height * 0.3 + sin(this.x * 0.03) * 50;
+            } else {
+                this.state = 'attacking';
+                this.attacking = true;
+                this.updateTarget();
+            }
+        } else if (this.state === 'attacking') {
+            // Swoop across screen following sine wave but faster
+            this.x += 9; // Faster swoop
+            this.y = height * 0.3 + sin(this.x * 0.03) * 120;
+            
+            // Track toward target when close
+            if (abs(this.x - this.targetX) < 100) {
+                // Aggressively dive toward target
+                let dy = this.targetY - this.y;
+                this.y += dy * 0.2;
+            }
+            
+            // Exit screen
+            if (this.x > width + 50) {
+                this.consecutiveAttacks++;
+                
+                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+                    // Come back from other side
+                    this.x = -50;
+                    this.state = 'approaching';
+                    this.updateTarget();
+                } else {
+                    this.state = 'retreating';
+                    this.attacking = false;
+                }
+            }
+        } else if (this.state === 'retreating') {
+            // Reset
+            this.state = 'approaching';
+            this.attackDelay = random(90, 150);
+            this.x = -50;
+            this.consecutiveAttacks = 0;
+            this.maxConsecutiveAttacks = random(2, 4);
+        }
+    }
+    
+    executeGlidePattern() {
+        if (this.state === 'approaching') {
+            // Glide in from top corner faster
+            this.x += 5;
+            this.y += 2.5;
+            
+            if (this.y > height * 0.15) {
+                this.state = 'attacking';
+                this.attacking = true;
+                this.updateTarget();
+            }
+        } else if (this.state === 'attacking') {
+            // Glide toward target aggressively
+            let dx = this.targetX - this.x;
+            let dy = this.targetY - this.y;
+            let dist = sqrt(dx * dx + dy * dy);
+            
+            if (dist > 10) {
+                this.x += (dx / dist) * 7; // Much faster glide
+                this.y += (dy / dist) * 7;
+            }
+            
+            // Pass through and maybe attack again
+            if (this.y > height - 100 || this.x < -50 || this.x > width + 50) {
+                this.consecutiveAttacks++;
+                
+                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+                    // Reset for another pass
+                    this.state = 'approaching';
+                    this.x = random() < 0.5 ? -50 : width + 50;
+                    this.y = random(50, 150);
+                    this.updateTarget();
+                } else {
+                    this.state = 'retreating';
+                    this.attacking = false;
+                }
+            }
+        } else if (this.state === 'retreating') {
+            // Continue off screen
+            this.x += this.vx;
+            this.y += this.vy;
+            
+            // Reset
+            if (this.y > height + 50 || this.x < -100 || this.x > width + 100) {
+                this.state = 'approaching';
+                this.attackDelay = random(120, 180);
+                this.x = random() < 0.5 ? -50 : width + 50;
+                this.y = random(50, 150);
+                this.vx = this.x < width/2 ? 5 : -5;
+                this.vy = 2.5;
+                this.consecutiveAttacks = 0;
+                this.maxConsecutiveAttacks = random(2, 4);
+            }
+        }
+    }
+    
+    executeCirclePattern() {
+        if (this.state === 'approaching') {
+            // Move to circle start position
+            let startX = this.circleCenter.x + cos(0) * this.circleRadius;
+            let startY = this.circleCenter.y + sin(0) * this.circleRadius;
+            
+            let dx = startX - this.x;
+            let dy = startY - this.y;
+            
+            this.x += dx * 0.1;
+            this.y += dy * 0.1;
+            
+            if (abs(dx) < 20 && abs(dy) < 20) {
+                this.state = 'attacking';
+                this.attacking = true;
+                this.circleAngle = 0;
+            }
+        } else if (this.state === 'attacking') {
+            // Circle around center FASTER
+            this.circleAngle += 0.08; // Faster circling
+            this.x = this.circleCenter.x + cos(this.circleAngle) * this.circleRadius;
+            this.y = this.circleCenter.y + sin(this.circleAngle) * this.circleRadius;
+            
+            // More frequent dives toward center
+            if (frameCount % 60 === 0) { // Every second instead of every 2 seconds
+                this.circleRadius = max(30, this.circleRadius - 50);
+            } else {
+                this.circleRadius = min(150, this.circleRadius + 2);
+            }
+            
+            // Complete circle faster
+            if (this.circleAngle > TWO_PI * 1.5) { // 1.5 circles instead of 2
+                this.state = 'retreating';
+                this.attacking = false;
+            }
+        } else if (this.state === 'retreating') {
+            // Fly away
+            this.y -= 7;
+            
+            if (this.y < -50) {
+                this.state = 'approaching';
+                this.attackDelay = random(150, 240);
+                this.x = random(width);
+            }
+        }
+    }
+
+    checkCollisions() {
+        // Check collision with spider
+        if (this.attacking && dist(this.x, this.y, spider.pos.x, spider.pos.y) < this.size + spider.radius) {
+            // Hit spider!
+            if (gamePhase === 'DAWN') {
+                // Calculate damage based on remaining stamina
+                let damage = 20; // Base damage
+                
+                // If spider has no stamina, GAME OVER!
+                if (jumpStamina <= 0) {
+                    triggerGameOver('Exhausted spider caught by bird!');
+                    return;
+                }
+                
+                // Otherwise, reduce stamina
+                jumpStamina = max(0, jumpStamina - damage);
+                stats.birdHitsTaken++;
+                
+                // Knockback effect
+                spider.vel.x = (spider.pos.x - this.x) * 0.3;
+                spider.vel.y = -3;
+                spider.isAirborne = true;
+                
+                // Red damage particles
+                for (let i = 0; i < 12; i++) {
+                    let p = new Particle(spider.pos.x, spider.pos.y);
+                    p.color = color(255, 50, 50);
+                    p.vel = createVector(random(-4, 4), random(-4, 1));
+                    p.size = random(4, 8);
+                    particles.push(p);
+                }
+                
+                // Screen shake effect
+                screenShake = 10;
+                
+                // Warning notification if stamina is low
+                if (jumpStamina <= 20) {
+                    notifications.push(new Notification("CRITICAL STAMINA!", color(255, 50, 50)));
+                } else if (jumpStamina <= 40) {
+                    notifications.push(new Notification("Low stamina - find cover!", color(255, 150, 50)));
+                }
+            }
+            
+            // Bird bounces off
+            this.state = 'retreating';
+            this.attacking = false;
+        }
+
+    // Check collision with web strands
+    if (this.attacking) {
+      for (let strand of webStrands) {
+        if (!strand.broken && strand.path) {
+          for (let point of strand.path) {
+            if (dist(this.x, this.y, point.x, point.y) < this.size) {
+              // Bird breaks the strand!
+              strand.broken = true
+              stats.strandsLostInNight++
+
+              // Particles
+              for (let i = 0; i < 5; i++) {
+                let p = new Particle(point.x, point.y)
+                p.color = color(255, 255, 255)
+                p.vel = createVector(random(-2, 2), random(-2, 2))
+                particles.push(p)
+              }
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // Thief bird steals flies
+    if (this.isThief && this.attacking) {
+      for (let i = flies.length - 1; i >= 0; i--) {
+        let fly = flies[i]
+        if (
+          (fly.stuck || fly.caught) &&
+          dist(this.x, this.y, fly.pos.x, fly.pos.y) < this.size + 10
+        ) {
+          // Steal the fly!
+          flies.splice(i, 1)
+
+          // Purple particles for theft
+          for (let j = 0; j < 6; j++) {
+            let p = new Particle(fly.pos.x, fly.pos.y)
+            p.color = color(200, 100, 255)
+            p.vel = createVector(random(-2, 2), random(-2, 2))
+            particles.push(p)
+          }
+
+          // Thief escapes after stealing
+          this.state = 'retreating'
+          this.attacking = false
+          this.active = false // Deactivate thief after successful theft
+          break
+        }
+      }
+    }
+  }
+
+  display () {
+    push()
+    translate(this.x, this.y)
+
+    // Rotate based on movement
+    if (this.state === 'attacking' && this.pattern === 'dive') {
+      rotate(PI / 2) // Point down when diving
+    } else if (this.vx !== 0) {
+      rotate(atan2(this.vy, this.vx))
+    }
+
+    // Shadow
+    push()
+    noStroke()
+    fill(0, 0, 0, 30)
+    ellipse(5, 5, this.size * 2)
+    pop()
+
+    // Wings
+    let wingSpread = sin(this.wingPhase) * this.size * 0.8
+
+    // Wing shadows
+    noStroke()
+    fill(0, 0, 0, 40)
+    ellipse(-wingSpread + 2, 2, this.size * 1.5, this.size * 0.5)
+    ellipse(wingSpread + 2, 2, this.size * 1.5, this.size * 0.5)
+
+    // Wings
+    fill(this.isThief ? color(120, 70, 180) : color(80, 80, 80))
+    ellipse(-wingSpread, 0, this.size * 1.5, this.size * 0.5)
+    ellipse(wingSpread, 0, this.size * 1.5, this.size * 0.5)
+
+    // Body
+    fill(this.isThief ? color(100, 50, 150) : color(50, 50, 50))
+    ellipse(0, 0, this.size * 0.8, this.size)
+
+    // Head
+    fill(this.isThief ? color(80, 40, 120) : color(30, 30, 30))
+    ellipse(0, -this.size * 0.4, this.size * 0.5)
+
+    // Eye
+    fill(this.isThief ? color(255, 100, 255) : color(255, 100, 100))
+    noStroke()
+    ellipse(3, -this.size * 0.4, 4)
+
+    // Beak
+    fill(this.isThief ? color(200, 150, 50) : color(200, 150, 0))
+    triangle(
+      this.size * 0.25,
+      -this.size * 0.4,
+      this.size * 0.45,
+      -this.size * 0.35,
+      this.size * 0.25,
+      -this.size * 0.3
+    )
+
+    // Tail feathers
+    fill(this.isThief ? color(120, 70, 180) : color(80, 80, 80))
+    for (let i = -1; i <= 1; i++) {
+      push()
+      translate(-this.size * 0.3, this.size * 0.3)
+      rotate(i * 0.2)
+      ellipse(0, 0, this.size * 0.3, this.size * 0.8)
+      pop()
+    }
+
+    // Warning indicator if attacking
+    if (this.attacking && frameCount % 20 < 10) {
+      noFill()
+      stroke(255, 100, 100, 150)
+      strokeWeight(2)
+      ellipse(0, 0, this.size * 2.5)
+    }
 
     pop()
   }
