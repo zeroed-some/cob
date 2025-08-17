@@ -97,8 +97,9 @@ class WebStrand {
         }
         
         for (let node of webNodes) {
-            if (dist(node.x, node.y, this.start.x, this.start.y) < 5 ||
-                dist(node.x, node.y, this.end.x, this.end.y) < 5) {
+            const nearStart = dist(node.x, node.y, this.start.x, this.start.y) < 5;
+            const nearEnd = this.end ? (dist(node.x, node.y, this.end.x, this.end.y) < 5) : false;
+            if (nearStart || nearEnd) {
                 node.applyForce(0, 0.1);
             }
         }
@@ -141,9 +142,16 @@ class WebStrand {
 
     display() {
         if (this.broken) return; // Don't display broken strands
-        
+
         push();
-        
+
+        // If the strand's end hasn't been established yet (e.g., just started deploying on touch),
+        // skip physics rendering here. The in-progress strand is drawn from game.js.
+        if (!this.end) {
+            pop();
+            return;
+        }
+
         // Change color based on tension
         if (this.tension > 0.8) {
             stroke(255, 200, 200, 200); // Reddish when strained
@@ -152,24 +160,24 @@ class WebStrand {
         } else {
             stroke(255, 255, 255, 200);
         }
-        
+
         strokeWeight(gamePhase === 'NIGHT' ? 2 : 1.5);
         noFill();
-        
+
         if (this.path && this.path.length > 2) {
             beginShape();
             curveVertex(this.path[0].x, this.path[0].y + this.vibration * sin(frameCount * 0.3));
-            
+
             for (let i = 0; i < this.path.length; i++) {
                 let point = this.path[i];
                 let vibOffset = this.vibration * sin(frameCount * 0.3 + i * 0.1) * (i / this.path.length);
                 curveVertex(point.x, point.y + vibOffset);
             }
-            
+
             let lastPoint = this.path[this.path.length - 1];
             curveVertex(lastPoint.x, lastPoint.y + this.vibration * sin(frameCount * 0.3));
             endShape();
-            
+
             stroke(255, 255, 255, 50);
             strokeWeight(4);
             beginShape();
@@ -182,15 +190,15 @@ class WebStrand {
         } else {
             let midX = (this.start.x + this.end.x) / 2;
             let midY = (this.start.y + this.end.y) / 2 + this.vibration * sin(frameCount * 0.3);
-            
+
             // Add sag based on horizontal distance
             let horizontalDist = abs(this.end.x - this.start.x);
             let sag = horizontalDist * 0.12;
             midY += sag * (1 - cos(PI * 0.5));
-            
+
             // Apply recoil deformation to the web (very subtle)
             midY += this.recoil * 2; // Further reduced from 3
-            
+
             beginShape();
             curveVertex(this.start.x, this.start.y);
             curveVertex(this.start.x, this.start.y);
@@ -198,7 +206,7 @@ class WebStrand {
             curveVertex(this.end.x, this.end.y);
             curveVertex(this.end.x, this.end.y);
             endShape();
-            
+
             stroke(255, 255, 255, 50);
             strokeWeight(4);
             beginShape();
@@ -209,7 +217,7 @@ class WebStrand {
             curveVertex(this.end.x, this.end.y);
             endShape();
         }
-        
+
         pop();
     }
 
@@ -227,11 +235,11 @@ class WebStrand {
         
         // Add some energy dissipation through the web network (more subtle)
         for (let node of webNodes) {
-            let d1 = dist(node.x, node.y, this.start.x, this.start.y);
-            let d2 = dist(node.x, node.y, this.end.x, this.end.y);
-            let minDist = min(d1, d2);
+            const d1 = dist(node.x, node.y, this.start.x, this.start.y);
+            const d2 = this.end ? dist(node.x, node.y, this.end.x, this.end.y) : Infinity;
+            const minDist = Math.min(d1, d2);
             if (minDist < 100) {
-                let forceFalloff = map(minDist, 0, 100, 0.3, 0);
+                const forceFalloff = map(minDist, 0, 100, 0.3, 0);
                 node.applyForce(0, force * forceFalloff * 0.15);
             }
         }

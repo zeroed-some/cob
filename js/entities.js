@@ -18,7 +18,7 @@ class Spider {
   }
 
   jump(targetX, targetY) {
-    if (!this.canJump) return;
+    if (!this.canJump || this.isAirborne) return; // Don't jump if already airborne
     
     let direction = createVector(targetX - this.pos.x, targetY - this.pos.y);
     let clickDistance = direction.mag();
@@ -33,6 +33,10 @@ class Spider {
     this.isAirborne = true;
     this.canJump = false;
     this.lastAnchorPoint = this.pos.copy();
+    // Record jump time for touch debounce
+    if (typeof window !== 'undefined') {
+      window.lastJumpTime = millis();
+    }
     
     // Check if we're jumping off a web strand
     for (let strand of webStrands) {
@@ -232,26 +236,33 @@ class Spider {
   }
 
   checkStrandCollision (strand) {
-    let d = this.pointToLineDistance(this.pos, strand.start, strand.end)
-    return d < this.radius + 2
+    if (!strand || !strand.start || !strand.end) return false;
+    let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
+    return d < this.radius + 2;
   }
 
   pointToLineDistance (point, lineStart, lineEnd) {
-    let line = p5.Vector.sub(lineEnd, lineStart)
-    let lineLength = line.mag()
-    line.normalize()
-
-    let pointToStart = p5.Vector.sub(point, lineStart)
-    let projLength = constrain(pointToStart.dot(line), 0, lineLength)
-
-    let closestPoint = p5.Vector.add(
-      lineStart,
-      p5.Vector.mult(line, projLength)
-    )
-    return p5.Vector.dist(point, closestPoint)
+    // Guard nulls
+    if (!lineStart || !lineEnd) {
+      return Infinity;
+    }
+    let line = p5.Vector.sub(lineEnd, lineStart);
+    let lineLength = line.mag();
+    // If start and end coincide, distance is to the single point
+    if (lineLength === 0) {
+      return p5.Vector.dist(point, lineStart);
+    }
+    line.normalize();
+    let pointToStart = p5.Vector.sub(point, lineStart);
+    let projLength = constrain(pointToStart.dot(line), 0, lineLength);
+    let closestPoint = p5.Vector.add(lineStart, p5.Vector.mult(line, projLength));
+    return p5.Vector.dist(point, closestPoint);
   }
 
   landOnObstacle (obstacle) {
+    // Only land if we're actually airborne
+    if (!this.isAirborne) return;
+    
     let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
     this.pos.x = obstacle.x + cos(angle) * (obstacle.radius + this.radius)
     this.pos.y = obstacle.y + sin(angle) * (obstacle.radius + this.radius)
@@ -260,20 +271,23 @@ class Spider {
   }
 
   landOnStrand (strand) {
-    let line = p5.Vector.sub(strand.end, strand.start)
-    let lineLength = line.mag()
-    line.normalize()
-
-    let pointToStart = p5.Vector.sub(this.pos, strand.start)
-    let projLength = constrain(pointToStart.dot(line), 0, lineLength)
-
-    let closestPoint = p5.Vector.add(
-      strand.start,
-      p5.Vector.mult(line, projLength)
-    )
-    this.pos = closestPoint
-    this.attachedObstacle = null // Not on an obstacle
-    this.land()
+    // Only land if we're actually airborne
+    if (!this.isAirborne) return;
+    if (!strand || !strand.start || !strand.end) return;
+    let line = p5.Vector.sub(strand.end, strand.start);
+    let lineLength = line.mag();
+    if (lineLength === 0) {
+      // Degenerate strand; snap to start
+      this.pos = strand.start.copy ? strand.start.copy() : createVector(strand.start.x, strand.start.y);
+    } else {
+      line.normalize();
+      let pointToStart = p5.Vector.sub(this.pos, strand.start);
+      let projLength = constrain(pointToStart.dot(line), 0, lineLength);
+      let closestPoint = p5.Vector.add(strand.start, p5.Vector.mult(line, projLength));
+      this.pos = closestPoint;
+    }
+    this.attachedObstacle = null; // Not on an obstacle
+    this.land();
   }
 
   land () {
@@ -281,10 +295,15 @@ class Spider {
     this.isAirborne = false
     this.canJump = true
 
-    if (currentStrand && isDeployingWeb && spacePressed) {
-      currentStrand.end = this.pos.copy()
-      currentStrand.path.push(this.pos.copy())
-      webNodes.push(new WebNode(this.pos.x, this.pos.y))
+    if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
+      // Ensure the strand has a valid end and a final node on landing
+      currentStrand.end = this.pos.copy();
+      if (!currentStrand.path || currentStrand.path.length === 0) {
+          currentStrand.path = [this.pos.copy()];
+      } else {
+          currentStrand.path.push(this.pos.copy());
+      }
+      webNodes.push(new WebNode(this.pos.x, this.pos.y));
     }
 
     currentStrand = null
@@ -854,12 +873,12 @@ class Obstacle {
     translate(this.x, this.y)
     
     if (this.type === 'balloon') {
-      // Balloon with ant in basket!
+      // Hot air balloon with canvas texture!
       push()
       
-      // String first (behind balloon)
+      // String/rope first (behind balloon)
       stroke(80, 60, 40)
-      strokeWeight(1)
+      strokeWeight(1.5)
       noFill()
       beginShape()
       for (let i = 0; i <= 10; i++) {
@@ -875,22 +894,115 @@ class Obstacle {
       fill(0, 0, 0, 30)
       ellipse(5, 5, this.radius * 2.2, this.radius * 2.5)
       
-      // Main balloon
+      // Main balloon with canvas panels
+      push()
+      // Draw vertical panels for that classic hot air balloon look
+      let numPanels = 8
+      for (let i = 0; i < numPanels; i++) {
+        let angle1 = (TWO_PI / numPanels) * i
+        let angle2 = (TWO_PI / numPanels) * (i + 1)
+        
+        // Alternate panel colors for striped effect
+        if (i % 2 === 0) {
+          fill(red(this.balloonColor), green(this.balloonColor), blue(this.balloonColor), 200)
+        } else {
+          fill(
+            red(this.balloonColor) - 30, 
+            green(this.balloonColor) - 30, 
+            blue(this.balloonColor) - 30, 
+            200
+          )
+        }
+        
+        // Draw tapered panel (wider at middle, narrow at top/bottom)
+        beginShape()
+        // Top point
+        vertex(0, -this.radius * 1.2)
+        // Upper curve
+        bezierVertex(
+          cos(angle1) * this.radius * 0.3, -this.radius * 0.9,
+          cos(angle1) * this.radius * 0.8, -this.radius * 0.3,
+          cos(angle1) * this.radius * 1.1, 0
+        )
+        // Lower curve to bottom
+        bezierVertex(
+          cos(angle1) * this.radius * 0.9, this.radius * 0.5,
+          cos(angle1) * this.radius * 0.4, this.radius * 0.9,
+          0, this.radius * 1.1
+        )
+        // Back up the other side
+        bezierVertex(
+          cos(angle2) * this.radius * 0.4, this.radius * 0.9,
+          cos(angle2) * this.radius * 0.9, this.radius * 0.5,
+          cos(angle2) * this.radius * 1.1, 0
+        )
+        bezierVertex(
+          cos(angle2) * this.radius * 0.8, -this.radius * 0.3,
+          cos(angle2) * this.radius * 0.3, -this.radius * 0.9,
+          0, -this.radius * 1.2
+        )
+        endShape(CLOSE)
+      }
+      
+      // Panel seams/ropes
+      stroke(60, 40, 20, 100)
+      strokeWeight(0.5)
+      for (let i = 0; i < numPanels; i++) {
+        let angle = (TWO_PI / numPanels) * i
+        // Vertical seam lines
+        beginShape()
+        noFill()
+        vertex(0, -this.radius * 1.2)
+        bezierVertex(
+          cos(angle) * this.radius * 0.3, -this.radius * 0.9,
+          cos(angle) * this.radius * 0.8, -this.radius * 0.3,
+          cos(angle) * this.radius * 1.1, 0
+        )
+        bezierVertex(
+          cos(angle) * this.radius * 0.9, this.radius * 0.5,
+          cos(angle) * this.radius * 0.4, this.radius * 0.9,
+          0, this.radius * 1.1
+        )
+        endShape()
+      }
+      
+      // Highlight on balloon
       noStroke()
-      fill(red(this.balloonColor), green(this.balloonColor), blue(this.balloonColor), 150)
-      ellipse(0, 0, this.radius * 2.2, this.radius * 2.5)
-      fill(red(this.balloonColor) + 30, green(this.balloonColor) + 30, blue(this.balloonColor) + 30, 200)
-      ellipse(-this.radius * 0.3, -this.radius * 0.3, this.radius * 1.2, this.radius * 1.4)
-      // Highlight
-      fill(255, 255, 255, 120)
-      ellipse(-this.radius * 0.4, -this.radius * 0.5, this.radius * 0.5, this.radius * 0.6)
+      fill(255, 255, 255, 80)
+      ellipse(-this.radius * 0.3, -this.radius * 0.5, this.radius * 0.6, this.radius * 0.7)
+      pop()
+      
+      // FLAME EFFECT!
+      push()
+      translate(0, this.radius - 5)
+      // Flame glow
+      noStroke()
+      fill(255, 200, 0, 40 + sin(frameCount * 0.3) * 20)
+      ellipse(0, 0, 25, 25)
+      fill(255, 150, 0, 60 + sin(frameCount * 0.4) * 30)
+      ellipse(0, 0, 15, 18)
+      // Flame itself
+      fill(255, 200, 0)
+      push()
+      let flameHeight = 8 + sin(frameCount * 0.5) * 3
+      translate(0, -2)
+      beginShape()
+      vertex(-3, 0)
+      bezierVertex(-3, -flameHeight * 0.7, -1, -flameHeight, 0, -flameHeight * 1.2)
+      bezierVertex(1, -flameHeight, 3, -flameHeight * 0.7, 3, 0)
+      endShape(CLOSE)
+      fill(255, 255, 200)
+      ellipse(0, -flameHeight * 0.5, 3, 4)
+      pop()
+      pop()
       
       // Basket
+      push()
       translate(0, this.radius + 10)
-      fill(139, 90, 43)
-      stroke(100, 60, 20)
+      fill(101, 67, 33)
+      stroke(80, 50, 20)
       strokeWeight(1)
-      // Trapezoid basket
+      // Woven basket shape
       beginShape()
       vertex(-8, 0)
       vertex(8, 0)
@@ -898,34 +1010,36 @@ class Obstacle {
       vertex(-6, 10)
       endShape(CLOSE)
       // Basket weave pattern
-      stroke(100, 60, 20, 100)
-      for (let i = -6; i < 6; i += 3) {
-        line(i, 2, i, 8)
+      stroke(80, 50, 20, 150)
+      for (let i = -6; i < 6; i += 2) {
+        line(i, 1, i, 9)
       }
-      for (let i = 2; i < 8; i += 3) {
+      for (let i = 2; i < 9; i += 2) {
         line(-6, i, 6, i)
       }
+      // Basket rim
+      stroke(60, 40, 20)
+      strokeWeight(1.5)
+      line(-8, 0, 8, 0)
+      pop()
       
-      // Ant in basket
-      translate(0, 5)
+      // Ant in basket (peeking over edge)
+      push()
+      translate(0, this.radius + 12)
       fill(20)
       noStroke()
-      // Ant body
-      ellipse(0, 0, 6, 4) // Head
-      ellipse(0, 3, 5, 6) // Thorax
-      ellipse(0, 7, 7, 9) // Abdomen
-      // Ant legs (animated)
+      // Just ant head and antennae visible
+      ellipse(0, -2, 6, 4) // Head peeking up
+      // Antennae
       stroke(20)
       strokeWeight(0.5)
-      for (let i = 0; i < 3; i++) {
-        let legAngle = this.antLegPhase + i * 0.5
-        let legSpread = 4 + sin(legAngle) * 2
-        line(-2, 3 + i * 2, -legSpread, 3 + i * 2)
-        line(2, 3 + i * 2, legSpread, 3 + i * 2)
-      }
-      // Antennae
-      line(-1, -1, -3, -3)
-      line(1, -1, 3, -3)
+      line(-1, -3, -3, -6)
+      line(1, -3, 3, -6)
+      // Tiny ant arms gripping basket edge
+      strokeWeight(1)
+      line(-3, 0, -4, 2)
+      line(3, 0, 4, 2)
+      pop()
       
       pop()
       

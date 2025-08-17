@@ -680,11 +680,13 @@ function drawMoon()
 function updateResources() {
     webSilk = min(webSilk + silkRechargeRate, maxWebSilk);
     
-    if (isDeployingWeb && spider.isAirborne && spacePressed && webSilk > 0) {
+    // Handle silk drain for both keyboard and touch
+    if (isDeployingWeb && spider.isAirborne && (spacePressed || touchHolding) && webSilk > 0) {
         webSilk = max(0, webSilk - silkDrainRate);
         if (webSilk <= 0) {
             isDeployingWeb = false;
             spacePressed = false;
+            touchHolding = false;
             if (currentStrand) {
                 webStrands.pop();
                 currentStrand = null;
@@ -692,12 +694,13 @@ function updateResources() {
         }
     }
     
-    if (!spacePressed && isDeployingWeb) {
+    if (!spacePressed && !touchHolding && isDeployingWeb) {
         isDeployingWeb = false;
     }
 }
 
 function handleWebDeployment() {
+    // Handle keyboard-based web deployment
     if (spacePressed && spider.isAirborne && !isDeployingWeb && webSilk > 10) {
         isDeployingWeb = true;
         currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
@@ -706,15 +709,33 @@ function handleWebDeployment() {
         webNodes.push(new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y));
     }
     
-    if (currentStrand && isDeployingWeb && spider.isAirborne) {
+    // Update web for keyboard controls
+    if (currentStrand && isDeployingWeb && spider.isAirborne && spacePressed) {
         currentStrand.end = spider.pos.copy();
         if (frameCount % 2 === 0) {
             currentStrand.path.push(spider.pos.copy());
         }
     }
+    
+    // Touch-based web deployment is handled in touchMoved()
 }
 
 function updateUI() {
+    // Update control instructions based on device
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        document.getElementById('info').innerHTML = 
+            'Tap to jump • Hold mid-air for web • Double-tap spider to munch!<br>' +
+            'Web Strands: <span id="strand-count">0</span><br>' +
+            'Flies Caught: <span id="flies-caught">0</span> | Munched: <span id="flies-munched">0</span>';
+    } else {
+        document.getElementById('info').innerHTML = 
+            'Click to jump • Space to spin web • Shift to munch!<br>' +
+            'Web Strands: <span id="strand-count">0</span><br>' +
+            'Flies Caught: <span id="flies-caught">0</span> | Munched: <span id="flies-munched">0</span>';
+    }
+    
     document.getElementById('strand-count').textContent = webStrands.length;
     document.getElementById('flies-caught').textContent = fliesCaught;
     document.getElementById('flies-munched').textContent = fliesMunched;
@@ -743,6 +764,12 @@ function updateUI() {
 }
 
 // Input handlers
+let touchStartTime = 0;
+let lastTapTime = 0;
+let touchHolding = false;
+let touchStartX = 0;
+let touchStartY = 0;
+
 function keyPressed() {
     if (key === ' ') {
         spacePressed = true;
@@ -763,8 +790,11 @@ function keyReleased() {
 }
 
 function mousePressed() {
-    if (!spider.isAirborne) {
-        spider.jump(mouseX, mouseY);
+    // Only handle mouse on desktop (not touch devices)
+    if (touches.length === 0) {
+        if (!spider.isAirborne) {
+            spider.jump(mouseX, mouseY);
+        }
     }
 }
 
@@ -773,14 +803,59 @@ function mouseReleased() {
 }
 
 function touchStarted() {
-    if (!spider.isAirborne) {
-        spider.jump(touches[0].x, touches[0].y);
+    if (touches.length > 0) {
+        touchStartTime = millis();
+        touchStartX = touches[0].x;
+        touchStartY = touches[0].y;
+        
+        // Check for double tap on spider to munch
+        let touchOnSpider = dist(touches[0].x, touches[0].y, spider.pos.x, spider.pos.y) < 30;
+        
+        if (touchOnSpider && millis() - lastTapTime < 300) {
+            // Double tap detected on spider - MUNCH!
+            spider.munch();
+            lastTapTime = 0; // Reset to prevent triple tap
+        } else if (!spider.isAirborne) {
+            // Single tap while on ground - jump
+            spider.jump(touches[0].x, touches[0].y);
+            lastTapTime = millis();
+        } else if (spider.isAirborne && webSilk > 10 && !isDeployingWeb) {
+            // Start web deployment if airborne (only if not already deploying)
+            touchHolding = true;
+            isDeployingWeb = true;
+            currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
+            currentStrand.path = [spider.lastAnchorPoint.copy()];
+            webStrands.push(currentStrand);
+            webNodes.push(new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y));
+        } else if (spider.isAirborne && isDeployingWeb) {
+            // If already deploying and user taps again, just continue (don't create new strand)
+            touchHolding = true;
+        }
     }
-    return false;
+    return false; // Prevent default
+}
+
+function touchMoved() {
+    // Update web deployment target while holding
+    if (touchHolding && spider.isAirborne && isDeployingWeb && currentStrand && webSilk > 0) {
+        // Web follows spider while deploying (not finger position)
+        currentStrand.end = spider.pos.copy();
+        if (frameCount % 2 === 0) {
+            currentStrand.path.push(spider.pos.copy());
+        }
+    }
+    return false; // Prevent default
 }
 
 function touchEnded() {
-    return false;
+    touchHolding = false;
+    
+    // Stop web deployment when releasing touch
+    if (isDeployingWeb && spider.isAirborne) {
+        isDeployingWeb = false;
+    }
+    
+    return false; // Prevent default
 }
 
 function windowResized() {
