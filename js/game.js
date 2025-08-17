@@ -2764,12 +2764,32 @@ function keyPressed () {
   }
 }
 
-function keyReleased () {
-  if (key === ' ') {
-    spacePressed = false
-    isDeployingWeb = false
-    return false
-  }
+function keyReleased() {
+    if (key === ' ') {
+        spacePressed = false;
+        
+        // FIX: Check if web is floating when released
+        if (isDeployingWeb && currentStrand && spider.isAirborne) {
+            // Spider is still airborne - this would create a floating web
+            // Remove the incomplete strand
+            if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
+                webStrands.pop();
+                
+                // Poof effect
+                for (let i = 0; i < 5; i++) {
+                    let p = new Particle(spider.pos.x, spider.pos.y);
+                    p.color = color(255, 200, 200, 100);
+                    p.vel = createVector(random(-2, 2), random(-2, 2));
+                    p.size = 3;
+                    particles.push(p);
+                }
+            }
+        }
+        
+        isDeployingWeb = false;
+        currentStrand = null;
+        return false;
+    }
 }
 
 function mousePressed () {
@@ -2919,15 +2939,39 @@ function touchMoved () {
   return false // Prevent default
 }
 
-function touchEnded () {
-  touchHolding = false
-
-  // Stop web deployment when releasing touch
-  if (isDeployingWeb && spider.isAirborne) {
-    isDeployingWeb = false
-  }
-
-  return false // Prevent default
+function touchEnded() {
+    touchHolding = false;
+    touchProcessing = false;
+    
+    // Power jump handling...
+    if (chargingJump && !spider.isAirborne) {
+        // ... existing power jump code ...
+    }
+    chargingJump = false;
+    jumpChargeTime = 0;
+    
+    // FIX: Check if web is floating when touch released
+    if (isDeployingWeb && currentStrand && spider.isAirborne) {
+        // Spider is still airborne - this would create a floating web
+        // Remove the incomplete strand
+        if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
+            webStrands.pop();
+            
+            // Poof effect
+            for (let i = 0; i < 5; i++) {
+                let p = new Particle(spider.pos.x, spider.pos.y);
+                p.color = color(255, 200, 200, 100);
+                p.vel = createVector(random(-2, 2), random(-2, 2));
+                p.size = 3;
+                particles.push(p);
+            }
+        }
+    }
+    
+    isDeployingWeb = false;
+    currentStrand = null;
+    
+    return false;
 }
 
 function windowResized () {

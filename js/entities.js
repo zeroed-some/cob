@@ -333,25 +333,92 @@ class Spider {
     this.land()
   }
 
-  land () {
-    this.vel.mult(0)
-    this.isAirborne = false
-    this.canJump = true
+  land() {
+        this.vel.mult(0);
+        this.isAirborne = false;
+        this.canJump = true;
 
-    if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
-      // Ensure the strand has a valid end and a final node on landing
-      currentStrand.end = this.pos.copy()
-      if (!currentStrand.path || currentStrand.path.length === 0) {
-        currentStrand.path = [this.pos.copy()]
-      } else {
-        currentStrand.path.push(this.pos.copy())
-      }
-      webNodes.push(new WebNode(this.pos.x, this.pos.y))
+        // FIX: Check if we're actually landing on something valid
+        let landedOnSomething = false;
+        
+        // Check if on ground
+        if (this.pos.y >= height - this.radius - 5) {
+            landedOnSomething = true;
+        }
+        
+        // Check if on an obstacle
+        for (let obstacle of obstacles) {
+            if (this.checkObstacleCollision(obstacle)) {
+                landedOnSomething = true;
+                break;
+            }
+        }
+        
+        // Check if on a web strand
+        for (let strand of webStrands) {
+            if (strand !== currentStrand && !strand.broken && this.checkStrandCollision(strand)) {
+                landedOnSomething = true;
+                break;
+            }
+        }
+        
+        // Check if on home branch
+        if (window.homeBranch) {
+            let branch = window.homeBranch;
+            let branchStart = Math.min(branch.startX, branch.endX);
+            let branchEnd = Math.max(branch.startX, branch.endX);
+            
+            if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
+                let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
+                t = constrain(t, 0, 1);
+                let branchTopThickness = lerp(branch.thickness * 0.9, branch.thickness * 0.35, t);
+                let branchSurfaceY = branch.y - branchTopThickness;
+                let angleCorrection = (this.pos.x - branchStart) * branch.angle;
+                branchSurfaceY += angleCorrection;
+                
+                if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
+                    landedOnSomething = true;
+                }
+            }
+        }
+        
+        // FIX: If we're deploying web but didn't land on anything valid, destroy the web
+        if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
+            if (landedOnSomething) {
+                // Valid landing - finalize the web
+                currentStrand.end = this.pos.copy();
+                if (!currentStrand.path || currentStrand.path.length === 0) {
+                    currentStrand.path = [this.pos.copy()];
+                } else {
+                    currentStrand.path.push(this.pos.copy());
+                }
+                webNodes.push(new WebNode(this.pos.x, this.pos.y));
+            } else {
+                // Invalid landing in mid-air - destroy the web!
+                if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
+                    webStrands.pop(); // Remove the invalid strand
+                    
+                    // Create poof particles
+                    for (let i = 0; i < 8; i++) {
+                        let p = new Particle(this.pos.x, this.pos.y);
+                        p.color = color(255, 255, 255, 150);
+                        p.vel = createVector(random(-3, 3), random(-3, 3));
+                        p.size = 4;
+                        particles.push(p);
+                    }
+                    
+                    // Notification
+                    if (notifications.length < 3) {
+                        notifications.push(new Notification("Web needs anchor point!", color(255, 150, 150)));
+                    }
+                }
+            }
+        }
+
+        currentStrand = null;
+        isDeployingWeb = false;
     }
 
-    currentStrand = null
-    isDeployingWeb = false
-  }
 
   display () {
     push()
