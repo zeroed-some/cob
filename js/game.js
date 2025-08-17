@@ -67,6 +67,7 @@ let staminaRegenRate = 0.2
 let isExhausted = false
 let fliesMunchedLastNight = 0
 let birds = []
+let staminaRegenCooldown = 0
 
 // PHASE 4B: Wind System
 let windActive = false
@@ -1037,16 +1038,83 @@ function draw () {
     pop()
   }
 
+  // Threat cue when regen is fully suppressed
+  if (gamePhase === 'DAWN') {
+    let showThreatCue = false
+    for (let b of birds) {
+      if (
+        b &&
+        b.state === 'diving' &&
+        dist(b.x, b.y, spider.pos.x, spider.pos.y) < 180
+      ) {
+        showThreatCue = true
+        break
+      }
+    }
+    if (showThreatCue) {
+      push()
+      textAlign(CENTER)
+      textSize(14)
+      fill(255, 80, 80, 210)
+      stroke(0)
+      strokeWeight(2)
+      text(
+        'UNDER ATTACK! stamina regen halted',
+        spider.pos.x,
+        spider.pos.y - 48
+      )
+      pop()
+    }
+  }
+
   // PHASE 4: Update and display birds during dawn
   if (gamePhase === 'DAWN') {
-    // Update stamina
-    if (!spider.isAirborne && spider.vel.mag() < 0.1) {
-      // Resting - faster regen
-      jumpStamina += staminaRegenRate * 2.5
-    } else {
-      // Moving - normal regen
-      jumpStamina += staminaRegenRate
+    // Update stamina (suppressed during bird attack sequences)
+    // Threat scan (expose flags for cooldown logic)
+    let anyBirdActive = false
+    let nearDivingBird = false
+    for (let b of birds) {
+      if (!b) continue
+      // any bird on screen during DAWN counts as pressure
+      if (b.state !== 'retreating') anyBirdActive = true
+      // hard suppression if a diving bird is close
+      if (b.state === 'diving') {
+        const d = dist(b.x, b.y, spider.pos.x, spider.pos.y)
+        if (d < 180) nearDivingBird = true
+      }
     }
+    const birdThreatMultiplier = nearDivingBird
+      ? 0.0
+      : anyBirdActive
+      ? 0.4
+      : 1.0
+
+    // Cooldown: delay regen start after jumps and while threats persist
+    if (staminaRegenCooldown > 0) {
+      staminaRegenCooldown--
+    }
+    if (nearDivingBird) {
+      staminaRegenCooldown = Math.max(staminaRegenCooldown, 90) // +1.5s after a near dive
+    } else if (anyBirdActive) {
+      staminaRegenCooldown = Math.max(staminaRegenCooldown, 45) // +0.75s while birds hunt
+    }
+    // Light movement also nudges the cooldown so regen only starts when resting
+    if (spider.vel.mag() >= 0.3) {
+      staminaRegenCooldown = Math.max(staminaRegenCooldown, 15)
+    }
+
+    // Base regen depends on motion
+    let regen =
+      staminaRegenRate *
+      (spider.isAirborne || spider.vel.mag() >= 0.1 ? 1.0 : 2.0)
+    // Apply threat suppression
+    regen *= birdThreatMultiplier
+    // Apply cooldown suppression
+    if (staminaRegenCooldown > 0) {
+      regen = 0
+    }
+
+    jumpStamina += regen
     jumpStamina = min(jumpStamina, maxJumpStamina)
     isExhausted = jumpStamina < jumpCost
 

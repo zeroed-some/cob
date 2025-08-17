@@ -23,13 +23,15 @@ class Spider {
     // DAWN PHASE: Check and consume stamina
     if (gamePhase === 'DAWN') {
       if (jumpStamina < jumpCost) {
-        // Not enough stamina to jump
         isExhausted = true
-        return // Can't jump
+        return
       }
-      // Consume stamina for jump
       jumpStamina -= jumpCost
       stats.totalJumps++
+      // Delay stamina regen after each jump during DAWN
+      if (gamePhase === 'DAWN') {
+        staminaRegenCooldown = 60 // 1s at 60fps
+      }
     }
 
     // PHASE 4B: Track wind jumps
@@ -60,7 +62,12 @@ class Spider {
     this.vel = direction
     this.isAirborne = true
     this.canJump = false
-    this.lastAnchorPoint = this.pos.copy()
+
+    // FIX: Ensure lastAnchorPoint is set to edge, not center
+    if (!this.lastAnchorPoint) {
+      // If no anchor point set yet, use current position
+      this.lastAnchorPoint = this.pos.copy()
+    }
     // Record jump time for touch debounce
     if (typeof window !== 'undefined') {
       window.lastJumpTime = millis()
@@ -301,10 +308,20 @@ class Spider {
     // Only land if we're actually airborne
     if (!this.isAirborne) return
 
+    // Calculate angle from obstacle center to spider
     let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
+
+    // Place spider on the edge of the circular collision boundary
     this.pos.x = obstacle.x + cos(angle) * (obstacle.radius + this.radius)
     this.pos.y = obstacle.y + sin(angle) * (obstacle.radius + this.radius)
-    this.attachedObstacle = obstacle // Track which obstacle we're on
+
+    // FIX: Set anchor point at the edge, not center
+    this.lastAnchorPoint = createVector(
+      obstacle.x + cos(angle) * obstacle.radius,
+      obstacle.y + sin(angle) * obstacle.radius
+    )
+
+    this.attachedObstacle = obstacle
     this.land()
   }
 
@@ -340,34 +357,48 @@ class Spider {
 
     // FIX: Check if we're actually landing on something valid
     let landedOnSomething = false
+    let landingPoint = null // Store where we're landing for anchor
 
     // Check if on ground
     if (this.pos.y >= height - this.radius - 5) {
       landedOnSomething = true
+      landingPoint = createVector(this.pos.x, height)
     }
 
     // Check if on an obstacle
-    for (let obstacle of obstacles) {
-      if (this.checkObstacleCollision(obstacle)) {
-        landedOnSomething = true
-        break
+    if (!landedOnSomething) {
+      for (let obstacle of obstacles) {
+        if (this.checkObstacleCollision(obstacle)) {
+          landedOnSomething = true
+          // Calculate edge point for anchor
+          let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
+          landingPoint = createVector(
+            obstacle.x + cos(angle) * obstacle.radius,
+            obstacle.y + sin(angle) * obstacle.radius
+          )
+          break
+        }
       }
     }
 
     // Check if on a web strand
-    for (let strand of webStrands) {
-      if (
-        strand !== currentStrand &&
-        !strand.broken &&
-        this.checkStrandCollision(strand)
-      ) {
-        landedOnSomething = true
-        break
+    if (!landedOnSomething) {
+      for (let strand of webStrands) {
+        if (
+          strand !== currentStrand &&
+          !strand.broken &&
+          this.checkStrandCollision(strand)
+        ) {
+          landedOnSomething = true
+          // For web strands, use spider position as anchor
+          landingPoint = this.pos.copy()
+          break
+        }
       }
     }
 
     // Check if on home branch
-    if (window.homeBranch) {
+    if (!landedOnSomething && window.homeBranch) {
       let branch = window.homeBranch
       let branchStart = Math.min(branch.startX, branch.endX)
       let branchEnd = Math.max(branch.startX, branch.endX)
@@ -386,21 +417,25 @@ class Spider {
 
         if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
           landedOnSomething = true
+          landingPoint = createVector(this.pos.x, branchSurfaceY)
         }
       }
     }
 
     // FIX: If we're deploying web but didn't land on anything valid, destroy the web
     if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
-      if (landedOnSomething) {
-        // Valid landing - finalize the web
-        currentStrand.end = this.pos.copy()
+      if (landedOnSomething && landingPoint) {
+        // Valid landing - finalize the web at the landing point
+        currentStrand.end = landingPoint.copy() // Use edge point, not spider center
         if (!currentStrand.path || currentStrand.path.length === 0) {
-          currentStrand.path = [this.pos.copy()]
+          currentStrand.path = [landingPoint.copy()]
         } else {
-          currentStrand.path.push(this.pos.copy())
+          currentStrand.path.push(landingPoint.copy())
         }
-        webNodes.push(new WebNode(this.pos.x, this.pos.y))
+        webNodes.push(new WebNode(landingPoint.x, landingPoint.y))
+
+        // Update last anchor for next web
+        this.lastAnchorPoint = landingPoint.copy()
       } else {
         // Invalid landing in mid-air - destroy the web!
         if (
@@ -426,6 +461,9 @@ class Spider {
           }
         }
       }
+    } else if (landedOnSomething && landingPoint) {
+      // Update last anchor point even when not deploying web
+      this.lastAnchorPoint = landingPoint.copy()
     }
 
     currentStrand = null
@@ -869,42 +907,50 @@ class Obstacle {
   updateAttachedStrands () {
     // Update web strands that are connected to this obstacle
     for (let strand of webStrands) {
-      // Check if strand starts at this obstacle
-      if (
-        dist(strand.start.x, strand.start.y, this.x, this.y) <
-        this.radius + 10
-      ) {
-        strand.start.x = this.x
-        strand.start.y = this.y
+      // Check if strand starts near this obstacle's edge
+      let startDist = dist(strand.start.x, strand.start.y, this.x, this.y)
+      if (startDist >= this.radius - 5 && startDist <= this.radius + 15) {
+        // Strand is attached to edge - update to maintain edge connection
+        let angle = atan2(strand.start.y - this.y, strand.start.x - this.x)
+        strand.start.x = this.x + cos(angle) * this.radius
+        strand.start.y = this.y + sin(angle) * this.radius
         if (strand.path && strand.path.length > 0) {
-          strand.path[0].x = this.x
-          strand.path[0].y = this.y
+          strand.path[0].x = strand.start.x
+          strand.path[0].y = strand.start.y
         }
       }
 
-      // Check if strand ends at this obstacle
-      if (
-        strand.end &&
-        dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
-      ) {
-        strand.end.x = this.x
-        strand.end.y = this.y
-        if (strand.path && strand.path.length > 0) {
-          strand.path[strand.path.length - 1].x = this.x
-          strand.path[strand.path.length - 1].y = this.y
+      // Check if strand ends near this obstacle's edge
+      if (strand.end) {
+        let endDist = dist(strand.end.x, strand.end.y, this.x, this.y)
+        if (endDist >= this.radius - 5 && endDist <= this.radius + 15) {
+          // Strand is attached to edge - update to maintain edge connection
+          let angle = atan2(strand.end.y - this.y, strand.end.x - this.x)
+          strand.end.x = this.x + cos(angle) * this.radius
+          strand.end.y = this.y + sin(angle) * this.radius
+          if (strand.path && strand.path.length > 0) {
+            strand.path[strand.path.length - 1].x = strand.end.x
+            strand.path[strand.path.length - 1].y = strand.end.y
+          }
         }
       }
     }
   }
 
   breakAttachedStrands () {
-    // Break any strands attached to this beetle that has drifted too far
+    // Check for strands attached to this obstacle's edge
     for (let strand of webStrands) {
+      // Check if attached to edge (not center)
+      let startDist = dist(strand.start.x, strand.start.y, this.x, this.y)
       let attachedToStart =
-        dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10
-      let attachedToEnd =
-        strand.end &&
-        dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
+        startDist >= this.radius - 5 && startDist <= this.radius + 15
+
+      let attachedToEnd = false
+      if (strand.end) {
+        let endDist = dist(strand.end.x, strand.end.y, this.x, this.y)
+        attachedToEnd =
+          endDist >= this.radius - 5 && endDist <= this.radius + 15
+      }
 
       if (attachedToStart || attachedToEnd) {
         // Mark strand as broken
@@ -1056,7 +1102,11 @@ class Obstacle {
       // Matte fabric shading (subtle, non-glossy)
       noStroke()
       // Soft radial shading toward top-left to imply ambient light without specular shine
-      for (let r = this.radius * 1.2; r > this.radius * 0.2; r -= this.radius * 0.15) {
+      for (
+        let r = this.radius * 1.2;
+        r > this.radius * 0.2;
+        r -= this.radius * 0.15
+      ) {
         fill(255, 255, 255, 8) // very low alpha
         ellipse(-this.radius * 0.25, -this.radius * 0.35, r * 0.25, r * 0.18)
       }
@@ -1622,19 +1672,51 @@ class Bird {
       // Update target position while diving
       if (frameCount % 8 === 0) {
         this.targetX = spider.pos.x
-        this.targetY = spider.pos.y
+        // Keep steering intent downward; don't let target sit above our per-dive floor
+        this.targetY =
+          typeof this.pullUpY === 'number'
+            ? Math.min(spider.pos.y, this.pullUpY - 4)
+            : spider.pos.y
       }
 
       // Only consider bailing out after a minimum number of dive frames
-      let canBailOut = this.diveFrames > 15
+      let canBailOut = this.diveFrames > 22
       // Use pullUpY for stable bailout check
-      let reachedPullUpY = (typeof this.pullUpY === 'number') ? (this.y > this.pullUpY) : false
+      let reachedPullUpY =
+        typeof this.pullUpY === 'number' ? this.y > this.pullUpY : false
       let reachedBottom = this.y > height - 20 // Go almost to canvas bottom
-      let closeToSpider = dist(this.x, this.y, spider.pos.x, spider.pos.y) < 50
+      const hitCollision =
+        dist(this.x, this.y, spider.pos.x, spider.pos.y) <=
+        this.size * 0.5 + spider.radius
+      const nearButNotHit =
+        !hitCollision &&
+        abs(this.x - spider.pos.x) < 30 &&
+        abs(this.y - spider.pos.y) < 24
 
-      if (canBailOut && (reachedPullUpY || reachedBottom || closeToSpider)) {
+      if (canBailOut && (hitCollision || reachedPullUpY || reachedBottom)) {
+        // Convert near-miss near the floor into a sweep instead of an early bail
+        if (
+          !hitCollision &&
+          reachedPullUpY &&
+          spider.pos.y > height - 30 &&
+          !this.sweeping
+        ) {
+          this.sweeping = true
+          this.y = spider.pos.y // lock to spider height
+          this.vy = 0
+          const sweepDirection = spider.pos.x > this.x ? 1 : -1
+          this.vx = sweepDirection * 8
+          setTimeout(() => {
+            this.sweeping = false
+            this.state = 'retreating'
+            this.attacking = false
+            this.diveFrames = 0
+            this.pullUpY = null
+          }, 500)
+          return // skip normal bailout path
+        }
         // If spider is at bottom and we haven't hit it yet, do a horizontal sweep
-        if (spider.pos.y > height - 30 && !closeToSpider && !this.sweeping) {
+        if (spider.pos.y > height - 30 && !hitCollision && !this.sweeping) {
           this.sweeping = true
           this.y = spider.pos.y // Match spider height
           this.vy = 0 // Stop vertical movement
