@@ -51,35 +51,17 @@ function setup() {
     let branchStartX = homeBranchSide === 'left' ? -20 : width + 20;
     let branchEndX = homeBranchSide === 'left' ? homeBranchLength : width - homeBranchLength;
     
-    // Generate twigs with FIXED positions
-    let twigs = [];
-    let numTwigs = 7;
-    for (let i = 0; i < numTwigs; i++) {
-        let t = 0.2 + (0.6 * i / (numTwigs - 1)); // Evenly distributed
-        let x = lerp(branchStartX, branchEndX, t); // Calculate actual X position
-        twigs.push({
-            x: x, // Store actual position, not percentage
-            length: 20 + (i * 4), // Vary length slightly
-            angle: (-PI/4 + (i * PI/20)) * (homeBranchSide === 'right' ? -1 : 1),
-            subTwigs: [
-                { pos: 0.65, length: 6, angle: -6 },
-                { pos: 0.45, length: 5, angle: 5 },
-                { pos: 0.8,  length: 4, angle: -3 }
-            ]
-        });
-    }
-    
-    // Generate leaves with FIXED positions
+    // Generate leaves with FIXED positions (simplified)
     let leaves = [];
-    for (let i = 0; i < 5; i++) {
-        let t = 0.3 + (0.4 * i / 4); // Distribute between 0.3 and 0.7
+    for (let i = 0; i < 3; i++) {
+        let t = 0.3 + (0.4 * i / 2);
         let x = lerp(branchStartX, branchEndX, t);
         leaves.push({
-            x: x, // Store actual position
-            yOffset: -homeBranchThickness - (i * 10) + (i % 2 === 0 ? -4 : 3),
-            rotation: (-PI/7 + (i * PI/8)) * (homeBranchSide === 'right' ? -1 : 1),
-            width: 16 + (i % 2 ? 2 : -1),
-            height: 8 + (i % 2 ? 1 : 0)
+            t: t, // Store position as percentage for proper rotation
+            yOffset: -homeBranchThickness - 10,
+            rotation: random(-PI/8, PI/8),
+            width: 16,
+            height: 8
         });
     }
     
@@ -93,15 +75,14 @@ function setup() {
         });
     }
     
-    // Store home branch info for rendering
+    // Store home branch info for rendering (simplified)
     window.homeBranch = {
         side: homeBranchSide,
         startX: branchStartX,
         endX: branchEndX,
         y: homeBranchY,
         thickness: homeBranchThickness,
-        angle: homeBranchSide === 'left' ? 0.05 : -0.05, // Fixed slight angle
-        twigs: twigs,
+        angle: homeBranchSide === 'left' ? 0.05 : -0.05,
         leaves: leaves,
         barkTextures: barkTextures
     };
@@ -486,33 +467,21 @@ function drawSkyGradient() {
         
         pop();
         
-        // Small twigs
+        // Small twigs - properly attached to the rotated branch
         stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
-        for (let twig of branch.twigs) {
-            push();
-            translate(twig.x, branch.y);
-            rotate(twig.angle);
-            
-            // Main twig
-            strokeWeight(3);
-            line(0, 0, twig.length, 0);
-            
-            // Sub twigs
-            strokeWeight(1);
-            for (let subTwig of twig.subTwigs) {
-                push();
-                translate(twig.length * subTwig.pos, 0);
-                rotate(subTwig.angle * 0.1);
-                line(0, 0, subTwig.length, -subTwig.angle);
-                pop();
-            }
-            pop();
-        }
         
-        // Add leaves
+        // Just add a couple simple twigs for visual interest
+        strokeWeight(3);
+        line(branch.startX + (branch.endX - branch.startX) * 0.3, -5, 
+             branch.startX + (branch.endX - branch.startX) * 0.3 - 10, -15);
+        line(branch.startX + (branch.endX - branch.startX) * 0.6, 0, 
+             branch.startX + (branch.endX - branch.startX) * 0.6 + 8, -12);
+        
+        // Add leaves (properly positioned within rotated branch)
         for (let leaf of branch.leaves) {
+            let leafX = branch.startX + (branch.endX - branch.startX) * leaf.t;
             push();
-            translate(leaf.x, branch.y + leaf.yOffset);
+            translate(leafX, leaf.yOffset);
             rotate(leaf.rotation);
             
             // Leaf shadow
