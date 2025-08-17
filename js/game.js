@@ -110,7 +110,21 @@ function setup() {
     let spiderStartX = homeBranchSide === 'left' ? 
         homeBranchLength * 0.8 : 
         width - homeBranchLength * 0.8;
-    spider = new Spider(spiderStartX, homeBranchY - 15);
+    
+    // Calculate the visual top of the branch at spider's position
+    let branchStart = Math.min(branchStartX, branchEndX);
+    let branchEnd = Math.max(branchStartX, branchEndX);
+    let t = (spiderStartX - branchStart) / (branchEnd - branchStart);
+    t = constrain(t, 0, 1);
+    
+    // Branch thickness tapers from full to 35%
+    let branchTopThickness = lerp(homeBranchThickness, homeBranchThickness * 0.35, t);
+    
+    // Account for branch angle
+    let angleOffset = (spiderStartX - branchStart) * Math.tan(homeBranchSide === 'left' ? 0.05 : -0.05);
+    
+    // Place spider on top of the visual branch
+    spider = new Spider(spiderStartX, homeBranchY - branchTopThickness + angleOffset);
     
     // Add invisible obstacles along the branch for web anchor points
     let numBranchAnchors = 3;
@@ -376,113 +390,90 @@ function drawSkyGradient() {
         endShape(CLOSE);
         pop();
         
-        // Main branch with organic shape and taper (gnarlier)
+        // Main branch with organic shape and taper
         push();
         translate(0, branch.y);
         rotate(branch.angle);
-
-        // Base color varies by phase
+        
         noStroke();
+        
+        // Base color
         if (gamePhase === 'NIGHT') {
             fill(30, 15, 5);
         } else {
             fill(92, 51, 23);
         }
-
-        // Build an irregular, tapered hull using noise to perturb the top/bottom edges
-        let segs = 24; // more segments for detail
-        let topPts = [];
-        let botPts = [];
-        let len = branch.endX - branch.startX;
-        for (let i = 0; i <= segs; i++) {
-            let t = i / segs;
-            let x = branch.startX + len * t;
-            // base radius tapers along the branch
-            let r = lerp(branch.thickness, branch.thickness * 0.35, t);
-            // add subtle bumpiness using noise keyed by x so it stays stable
-            let n = noise(x * 0.02, 3.1) - 0.5; // [-0.5, 0.5]
-            let bump = n * (4 + 6 * (1 - t)); // larger bumps near base
-            // slight sine undulation so it feels woody
-            let und = sin(t * TWO_PI * 1.5) * 2 * (1 - t);
-            let yTop = -(r + bump + und);
-            let yBot =  (r + bump * 0.6 + und * 0.4);
-            topPts.push({x, y: yTop});
-            botPts.push({x, y: yBot});
-        }
-
+        
+        // Branch body with taper
         beginShape();
-        // top edge forward
-        for (let p of topPts) {
-            vertex(p.x, p.y);
-        }
-        // bottom edge back
-        for (let i = botPts.length - 1; i >= 0; i--) {
-            vertex(botPts[i].x, botPts[i].y);
-        }
+        vertex(branch.startX, -branch.thickness);
+        bezierVertex(
+            branch.startX + (branch.endX - branch.startX) * 0.3, -branch.thickness * 0.9,
+            branch.startX + (branch.endX - branch.startX) * 0.7, -branch.thickness * 0.6,
+            branch.endX, -branch.thickness * 0.35
+        );
+        vertex(branch.endX, branch.thickness * 0.35);
+        bezierVertex(
+            branch.startX + (branch.endX - branch.startX) * 0.7, branch.thickness * 0.6,
+            branch.startX + (branch.endX - branch.startX) * 0.3, branch.thickness * 0.9,
+            branch.startX, branch.thickness
+        );
         endShape(CLOSE);
-
-        // Add a secondary offshoot (fork) around 60% along the branch
-        let forkT = 0.6;
-        let forkX = branch.startX + len * forkT;
-        let forkLen = min(70, len * 0.18);
-        let forkAngle = (branch.side === 'right' ? -1 : 1) * (-PI/6 + noise(7.7) * PI/12);
-
-        // draw the fork as a tapered curved limb
+        
+        // Add a fork around 70% down the branch
         push();
-        translate(forkX, lerp(topPts[Math.floor(segs * forkT)].y, botPts[Math.floor(segs * forkT)].y, 0.15));
-        rotate(forkAngle);
-        noStroke();
+        let forkX = branch.startX + (branch.endX - branch.startX) * 0.7;
+        let forkY = 0;
+        translate(forkX, forkY);
+        rotate((branch.side === 'right' ? -1 : 1) * PI/6);
+        
+        // Fork branch
         if (gamePhase === 'NIGHT') {
             fill(35, 18, 6);
         } else {
             fill(102, 58, 28);
         }
+        
         beginShape();
-        vertex(0, -6);
-        bezierVertex(forkLen * 0.25, -8, forkLen * 0.55, -4, forkLen, 0);
-        vertex(forkLen, 3);
-        bezierVertex(forkLen * 0.55, 0, forkLen * 0.25, 4, 0, 6);
+        vertex(0, -8);
+        bezierVertex(20, -7, 35, -5, 50, -3);
+        vertex(50, 3);
+        bezierVertex(35, 5, 20, 7, 0, 8);
         endShape(CLOSE);
-        // tiny side twig on the fork
-        stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
-        strokeWeight(3);
-        line(forkLen * 0.4, 0, forkLen * 0.4 + 14, -10);
         pop();
-
-        // Lighter highlights along the crown ridge
+        
+        // Add lighter highlights
         if (gamePhase === 'NIGHT') {
-            fill(50, 25, 10, 140);
+            fill(50, 25, 10, 150);
         } else {
-            fill(139, 90, 43, 160);
+            fill(139, 90, 43, 180);
         }
+        
+        // Highlight on top ridge
         beginShape();
-        for (let i = 2; i <= segs - 2; i++) {
-            let p = topPts[i];
-            vertex(p.x, p.y + 3);
-        }
-        for (let i = segs - 2; i >= 2; i--) {
-            let p = topPts[i];
-            vertex(p.x, p.y + 7);
-        }
+        vertex(branch.startX + 20, -branch.thickness * 0.8);
+        bezierVertex(
+            branch.startX + (branch.endX - branch.startX) * 0.4, -branch.thickness * 0.7,
+            branch.startX + (branch.endX - branch.startX) * 0.6, -branch.thickness * 0.5,
+            branch.endX - 20, -branch.thickness * 0.25
+        );
+        vertex(branch.endX - 20, -branch.thickness * 0.15);
+        bezierVertex(
+            branch.startX + (branch.endX - branch.startX) * 0.6, -branch.thickness * 0.4,
+            branch.startX + (branch.endX - branch.startX) * 0.4, -branch.thickness * 0.6,
+            branch.startX + 20, -branch.thickness * 0.7
+        );
         endShape(CLOSE);
-
-        // Bark grooves: short diagonal strokes with slight randomness
-        stroke(60, 30, 10, 110);
+        
+        // Bark texture lines
+        stroke(60, 30, 10, 100);
         strokeWeight(1);
-        for (let i = 0; i < branch.barkTextures.length; i++) {
-            let bx = branch.barkTextures[i].x;
-            // only draw inside the branch span
-            if (bx < min(branch.startX, branch.endX) || bx > max(branch.startX, branch.endX)) continue;
-            let t = (bx - branch.startX) / (len || 1);
-            let r = lerp(branch.thickness, branch.thickness * 0.35, t);
-            let ny = (noise(bx * 0.03, 9.2) - 0.5) * 10;
-            let y = ny;
-            line(bx - 3, y - r * 0.2, bx + 4, y + r * 0.25);
-            if (i % 3 === 0) {
-                line(bx - 5, y + 1, bx + 9, y + 3);
+        for (let texture of branch.barkTextures) {
+            if (texture.x % 20 < 10) {
+                line(texture.x, texture.yOff, texture.x + 3, texture.endYOff);
             }
         }
-
+        
         // Knots
         noStroke();
         if (gamePhase === 'NIGHT') {
@@ -490,39 +481,38 @@ function drawSkyGradient() {
         } else {
             fill(80, 40, 15);
         }
-        ellipse(branch.startX + len * 0.28, -2, 14, 11);
-        ellipse(branch.startX + len * 0.73, 3, 11, 9);
-
+        ellipse(branch.startX + (branch.endX - branch.startX) * 0.3, -5, 12, 8);
+        ellipse(branch.startX + (branch.endX - branch.startX) * 0.65, 3, 8, 10);
+        
         pop();
         
-        // Small twigs with organic angles
+        // Small twigs
         stroke(gamePhase === 'NIGHT' ? color(40, 20, 0) : color(101, 67, 33));
         for (let twig of branch.twigs) {
             push();
-            translate(twig.x, 0);
-
-            // Make twigs thicker at base, drawn as a gentle curve
-            strokeWeight(4);
-            bezier(0, 0, twig.length * 0.18, twig.length * 0.05, twig.length * 0.42, twig.length * 0.12, twig.length * 0.62, twig.length * 0.16);
+            translate(twig.x, branch.y);
+            rotate(twig.angle);
+            
+            // Main twig
             strokeWeight(3);
-            bezier(twig.length * 0.62, twig.length * 0.16, twig.length * 0.74, twig.length * 0.18, twig.length * 0.86, twig.length * 0.2, twig.length, twig.length * 0.22);
-            strokeWeight(2);
-            line(twig.length * 0.82, twig.length * 0.2, twig.length * 1.05, twig.length * 0.28);
-
-            // Tiny sub-twigs
+            line(0, 0, twig.length, 0);
+            
+            // Sub twigs
             strokeWeight(1);
             for (let subTwig of twig.subTwigs) {
-                line(twig.length * subTwig.pos, twig.length * 0.15, 
-                     twig.length * subTwig.pos + subTwig.length, 
-                     twig.length * 0.15 + subTwig.angle);
+                push();
+                translate(twig.length * subTwig.pos, 0);
+                rotate(subTwig.angle * 0.1);
+                line(0, 0, subTwig.length, -subTwig.angle);
+                pop();
             }
             pop();
         }
         
-        // Add leaves with more natural placement
+        // Add leaves
         for (let leaf of branch.leaves) {
             push();
-            translate(leaf.x, leaf.yOffset);
+            translate(leaf.x, branch.y + leaf.yOffset);
             rotate(leaf.rotation);
             
             // Leaf shadow
@@ -545,7 +535,6 @@ function drawSkyGradient() {
             pop();
         }
         
-        pop();
         pop();
     }
 }
