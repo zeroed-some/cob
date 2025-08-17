@@ -90,15 +90,18 @@ function setup() {
     // Place spider at the tip of the branch
     let spiderStartX = branchEndX; // Place at the end/tip
     
-    // At the tip (t=1), thickness is 35% of original
+    // The branch is drawn with a taper - at the tip it's 35% thickness
+    // The branch rendering uses push/translate/rotate, so we need to account for that
     let branchTopThickness = homeBranchThickness * 0.35;
     
-    // The branch is drawn centered at branch.y, so the top is at:
+    // The branch is drawn centered at branch.y after rotation
+    // Since the rotation is small, we can approximate
     let branchSurfaceY = homeBranchY - branchTopThickness;
     
-    // Add slight angle correction
-    let angleCorrection = (spiderStartX - branchStartX) * window.homeBranch.angle;
-    branchSurfaceY += angleCorrection;
+    // The branch rotates around (0, homeBranchY), so points further from origin rotate more
+    // For small angles: y_rotated ≈ y + x * sin(angle) ≈ y + x * angle
+    let rotationOffset = spiderStartX * window.homeBranch.angle;
+    branchSurfaceY += rotationOffset;
     
     // Place spider on top of the visual branch at the tip (8 is spider radius)
     spider = new Spider(spiderStartX, branchSurfaceY - 8);
