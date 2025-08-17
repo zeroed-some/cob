@@ -8,18 +8,46 @@ class WebStrand {
         this.vibration = 0;
         this.path = [];
         this.segments = []; // For physics simulation
-        this.maxLength = 200; // Maximum strand length before it breaks
+        this.maxLength = 260; // Maximum strand length before it breaks (increased by 30%)
         this.tension = 0;
         this.broken = false;
+        this.recoil = 0; // Recoil amplitude for spring physics
+        this.recoilVelocity = 0; // Velocity of recoil oscillation
+        this.damping = 0.75; // Damping factor for recoil (much faster damping to prevent accumulation)
+        this.springConstant = 0.04; // Spring stiffness (much softer spring)
+        this.flexibility = 1.0; // How much the web can be dragged by flies
     }
 
     update() {
         this.vibration *= 0.95;
         
+        // Update recoil physics (spring oscillation)
+        if (abs(this.recoil) > 0.01 || abs(this.recoilVelocity) > 0.01) {
+            // Apply spring force (Hooke's law)
+            let springForce = -this.springConstant * this.recoil;
+            this.recoilVelocity += springForce;
+            
+            // Apply damping
+            this.recoilVelocity *= this.damping;
+            
+            // Update recoil position
+            this.recoil += this.recoilVelocity;
+            
+            // Clamp small values to stop oscillation
+            if (abs(this.recoil) < 0.01 && abs(this.recoilVelocity) < 0.01) {
+                this.recoil = 0;
+                this.recoilVelocity = 0;
+            }
+        }
+        
         // Calculate strand length and tension
         if (this.end) {
             let length = dist(this.start.x, this.start.y, this.end.x, this.end.y);
             this.tension = length / this.maxLength;
+            
+            // Calculate flexibility factor (longer, less taut webs are more flexible)
+            this.flexibility = map(this.tension, 0.2, 1.0, 1.5, 0.3); // More flexible when less taut
+            this.flexibility = constrain(this.flexibility, 0.3, 1.5);
             
             // Break if overstretched or unsupported arc
             if (this.tension > 1.5 || this.checkUnsupportedArc()) {
@@ -50,6 +78,9 @@ class WebStrand {
                     point.y += 0.22;
                     point.x += windX * (0.6 + i / this.path.length * 0.8);
                     point.y += windY * 0.4;
+                    
+                    // Apply recoil to path points (very subtle)
+                    point.y += this.recoil * (1 + sin(i * 0.3) * 0.5);
                 }
             }
 
@@ -157,6 +188,9 @@ class WebStrand {
             let sag = horizontalDist * 0.12;
             midY += sag * (1 - cos(PI * 0.5));
             
+            // Apply recoil deformation to the web (very subtle)
+            midY += this.recoil * 2; // Further reduced from 3
+            
             beginShape();
             curveVertex(this.start.x, this.start.y);
             curveVertex(this.start.x, this.start.y);
@@ -181,6 +215,26 @@ class WebStrand {
 
     vibrate(amount) {
         this.vibration = min(this.vibration + amount, 10);
+    }
+    
+    // Apply recoil force when spider interacts with the web
+    applyRecoil(force) {
+        // Newton's third law - the web recoils opposite to the applied force
+        this.recoilVelocity += force;
+        
+        // Also trigger vibration for visual feedback (scaled down)
+        this.vibrate(abs(force) * 1);
+        
+        // Add some energy dissipation through the web network (more subtle)
+        for (let node of webNodes) {
+            let d1 = dist(node.x, node.y, this.start.x, this.start.y);
+            let d2 = dist(node.x, node.y, this.end.x, this.end.y);
+            let minDist = min(d1, d2);
+            if (minDist < 100) {
+                let forceFalloff = map(minDist, 0, 100, 0.3, 0);
+                node.applyForce(0, force * forceFalloff * 0.15);
+            }
+        }
     }
 }
 

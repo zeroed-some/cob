@@ -16,17 +16,63 @@ class Spider {
         this.munchCooldown = 0;
     }
 
-    jump(targetX, targetY) {
+jump(targetX, targetY) {
         if (!this.canJump) return;
         
         let direction = createVector(targetX - this.pos.x, targetY - this.pos.y);
+        let clickDistance = direction.mag();
         direction.normalize();
-        direction.mult(this.jumpPower);
+        
+        // Scale jump power based on click distance (closer clicks = smaller jumps)
+        let actualJumpPower = map(clickDistance, 0, 200, 3, this.jumpPower);
+        actualJumpPower = constrain(actualJumpPower, 3, this.jumpPower);
+        direction.mult(actualJumpPower);
         
         this.vel = direction;
         this.isAirborne = true;
         this.canJump = false;
         this.lastAnchorPoint = this.pos.copy();
+        
+        // Check if we're jumping off a web strand
+        for (let strand of webStrands) {
+            if (strand === currentStrand) continue;
+            
+            if (this.checkStrandCollision(strand)) {
+                // Much simpler shimmy detection based on actual jump power used
+                let isShimmy = actualJumpPower < 6; // If we used less than half power, it's a shimmy
+                
+                // Apply appropriate recoil based on movement type
+                if (isShimmy) {
+                    // Trigger shimmy visual effect
+                    this.shimmyEffect = 20;
+                    
+                    // NO recoil at all for shimmying - just tiny vibration
+                    strand.vibrate(0.3);
+                    
+                    // Tiny yellow particles
+                    let p = new Particle(this.pos.x, this.pos.y);
+                    p.color = color(255, 255, 100, 80);
+                    p.vel = createVector(random(-0.3, 0.3), random(-0.3, 0.3));
+                    p.size = 2;
+                    particles.push(p);
+                } else {
+                    // Scale recoil based on actual jump power
+                    let recoilForce = -(actualJumpPower / this.jumpPower) * 0.08; // Scale by power ratio
+                    strand.applyRecoil(recoilForce);
+                    
+                    // Create particles only for real jumps
+                    for (let i = 0; i < 2; i++) {
+                        let p = new Particle(this.pos.x, this.pos.y);
+                        p.color = color(255, 255, 255, 120);
+                        p.vel = createVector(random(-0.8, 0.8), random(1, 2));
+                        p.size = 3;
+                        particles.push(p);
+                    }
+                }
+                
+                break;
+            }
+        }
     }
     
     munch() {

@@ -102,7 +102,7 @@ function setup() {
     
     // Place spider on top of the visual branch at the tip (8 is spider radius)
     spider = new Spider(spiderStartX, branchSurfaceY - 8);
-
+    
     // Add invisible obstacles along the branch for web anchor points
     let numBranchAnchors = 3;
     for (let i = 0; i < numBranchAnchors; i++) {
