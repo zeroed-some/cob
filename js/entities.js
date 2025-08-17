@@ -333,92 +333,104 @@ class Spider {
     this.land()
   }
 
-  land() {
-        this.vel.mult(0);
-        this.isAirborne = false;
-        this.canJump = true;
+  land () {
+    this.vel.mult(0)
+    this.isAirborne = false
+    this.canJump = true
 
-        // FIX: Check if we're actually landing on something valid
-        let landedOnSomething = false;
-        
-        // Check if on ground
-        if (this.pos.y >= height - this.radius - 5) {
-            landedOnSomething = true;
-        }
-        
-        // Check if on an obstacle
-        for (let obstacle of obstacles) {
-            if (this.checkObstacleCollision(obstacle)) {
-                landedOnSomething = true;
-                break;
-            }
-        }
-        
-        // Check if on a web strand
-        for (let strand of webStrands) {
-            if (strand !== currentStrand && !strand.broken && this.checkStrandCollision(strand)) {
-                landedOnSomething = true;
-                break;
-            }
-        }
-        
-        // Check if on home branch
-        if (window.homeBranch) {
-            let branch = window.homeBranch;
-            let branchStart = Math.min(branch.startX, branch.endX);
-            let branchEnd = Math.max(branch.startX, branch.endX);
-            
-            if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
-                let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
-                t = constrain(t, 0, 1);
-                let branchTopThickness = lerp(branch.thickness * 0.9, branch.thickness * 0.35, t);
-                let branchSurfaceY = branch.y - branchTopThickness;
-                let angleCorrection = (this.pos.x - branchStart) * branch.angle;
-                branchSurfaceY += angleCorrection;
-                
-                if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
-                    landedOnSomething = true;
-                }
-            }
-        }
-        
-        // FIX: If we're deploying web but didn't land on anything valid, destroy the web
-        if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
-            if (landedOnSomething) {
-                // Valid landing - finalize the web
-                currentStrand.end = this.pos.copy();
-                if (!currentStrand.path || currentStrand.path.length === 0) {
-                    currentStrand.path = [this.pos.copy()];
-                } else {
-                    currentStrand.path.push(this.pos.copy());
-                }
-                webNodes.push(new WebNode(this.pos.x, this.pos.y));
-            } else {
-                // Invalid landing in mid-air - destroy the web!
-                if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
-                    webStrands.pop(); // Remove the invalid strand
-                    
-                    // Create poof particles
-                    for (let i = 0; i < 8; i++) {
-                        let p = new Particle(this.pos.x, this.pos.y);
-                        p.color = color(255, 255, 255, 150);
-                        p.vel = createVector(random(-3, 3), random(-3, 3));
-                        p.size = 4;
-                        particles.push(p);
-                    }
-                    
-                    // Notification
-                    if (notifications.length < 3) {
-                        notifications.push(new Notification("Web needs anchor point!", color(255, 150, 150)));
-                    }
-                }
-            }
-        }
+    // FIX: Check if we're actually landing on something valid
+    let landedOnSomething = false
 
-        currentStrand = null;
-        isDeployingWeb = false;
+    // Check if on ground
+    if (this.pos.y >= height - this.radius - 5) {
+      landedOnSomething = true
     }
 
+    // Check if on an obstacle
+    for (let obstacle of obstacles) {
+      if (this.checkObstacleCollision(obstacle)) {
+        landedOnSomething = true
+        break
+      }
+    }
+
+    // Check if on a web strand
+    for (let strand of webStrands) {
+      if (
+        strand !== currentStrand &&
+        !strand.broken &&
+        this.checkStrandCollision(strand)
+      ) {
+        landedOnSomething = true
+        break
+      }
+    }
+
+    // Check if on home branch
+    if (window.homeBranch) {
+      let branch = window.homeBranch
+      let branchStart = Math.min(branch.startX, branch.endX)
+      let branchEnd = Math.max(branch.startX, branch.endX)
+
+      if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
+        let t = (this.pos.x - branchStart) / (branchEnd - branchStart)
+        t = constrain(t, 0, 1)
+        let branchTopThickness = lerp(
+          branch.thickness * 0.9,
+          branch.thickness * 0.35,
+          t
+        )
+        let branchSurfaceY = branch.y - branchTopThickness
+        let angleCorrection = (this.pos.x - branchStart) * branch.angle
+        branchSurfaceY += angleCorrection
+
+        if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
+          landedOnSomething = true
+        }
+      }
+    }
+
+    // FIX: If we're deploying web but didn't land on anything valid, destroy the web
+    if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
+      if (landedOnSomething) {
+        // Valid landing - finalize the web
+        currentStrand.end = this.pos.copy()
+        if (!currentStrand.path || currentStrand.path.length === 0) {
+          currentStrand.path = [this.pos.copy()]
+        } else {
+          currentStrand.path.push(this.pos.copy())
+        }
+        webNodes.push(new WebNode(this.pos.x, this.pos.y))
+      } else {
+        // Invalid landing in mid-air - destroy the web!
+        if (
+          webStrands.length > 0 &&
+          webStrands[webStrands.length - 1] === currentStrand
+        ) {
+          webStrands.pop() // Remove the invalid strand
+
+          // Create poof particles
+          for (let i = 0; i < 8; i++) {
+            let p = new Particle(this.pos.x, this.pos.y)
+            p.color = color(255, 255, 255, 150)
+            p.vel = createVector(random(-3, 3), random(-3, 3))
+            p.size = 4
+            particles.push(p)
+          }
+
+          // Notification
+          if (notifications.length < 3) {
+            notifications.push(
+              new Notification('Web needs anchor point!', color(255, 150, 150))
+            )
+          }
+        }
+      }
+    }
+
+    currentStrand = null
+    isDeployingWeb = false
+  }
 
   display () {
     push()
@@ -763,8 +775,7 @@ class Obstacle {
         color(255, 200, 100) // Yellow
       ]
       this.balloonColor = random(this.balloonColors)
-      this.stringWave = 0
-      this.antLegPhase = random(TWO_PI)
+      // Remove complex properties - we don't need them for simple balloon
     } else if (this.type === 'beetle') {
       this.bobAmount = 4
       this.driftSpeed = random(0.15, 0.35)
@@ -785,9 +796,6 @@ class Obstacle {
         if (i === 0 || i === numPoints / 2) r = radius * 1.3
         this.leafPoints.push({ angle: angle, radius: r })
       }
-    } else if (this.type === 'branch') {
-      // Keep for backwards compatibility
-      this.bobAmount = 0
     }
   }
 
@@ -847,13 +855,8 @@ class Obstacle {
       if (this.driftDistance > 100) {
         this.breakAttachedStrands()
       }
-    }
 
-    // Update animation phases
-    if (this.type === 'balloon') {
-      this.stringWave = sin(frameCount * 0.05 + this.bobOffset) * 0.1
-      this.antLegPhase += 0.1
-    } else if (this.type === 'beetle') {
+      // Update wing animation
       this.wingPhase += 0.15
     }
 
@@ -981,212 +984,265 @@ class Obstacle {
     translate(this.x, this.y)
 
     if (this.type === 'balloon') {
-      // Hot air balloon with canvas texture!
+      // ============================================
+      // HOT AIR BALLOON WITH CANVAS TEXTURE
+      // ============================================
       push()
-
-      // String/rope first (behind balloon)
-      stroke(80, 60, 40)
-      strokeWeight(1.5)
-      noFill()
-      beginShape()
-      for (let i = 0; i <= 10; i++) {
-        let t = i / 10
-        let stringX = sin(t * PI * 2 + this.stringWave) * 3
-        let stringY = t * 40 + this.radius
-        curveVertex(stringX, stringY)
-      }
-      endShape()
 
       // Balloon shadow
       noStroke()
       fill(0, 0, 0, 30)
-      ellipse(5, 5, this.radius * 2.2, this.radius * 2.5)
+      ellipse(5, 5, this.radius * 2.1)
 
-      // Main balloon with canvas panels
-      push()
-      // Draw vertical panels for that classic hot air balloon look
+      // Main balloon with canvas panel texture
+      // Draw vertical panels like a real hot air balloon
       let numPanels = 8
       for (let i = 0; i < numPanels; i++) {
-        let angle1 = (TWO_PI / numPanels) * i
-        let angle2 = (TWO_PI / numPanels) * (i + 1)
+        push()
 
-        // Alternate panel colors for striped effect
+        // Rotate for each panel
+        rotate((TWO_PI / numPanels) * i)
+
+        // Alternate panel colors for classic hot air balloon look
         if (i % 2 === 0) {
           fill(
             red(this.balloonColor),
             green(this.balloonColor),
-            blue(this.balloonColor),
-            200
+            blue(this.balloonColor)
           )
         } else {
+          // Slightly darker alternate panels
           fill(
-            red(this.balloonColor) - 30,
-            green(this.balloonColor) - 30,
-            blue(this.balloonColor) - 30,
-            200
+            red(this.balloonColor) * 0.9,
+            green(this.balloonColor) * 0.9,
+            blue(this.balloonColor) * 0.9
           )
         }
 
-        // Draw tapered panel (wider at middle, narrow at top/bottom)
-        beginShape()
-        // Top point
-        vertex(0, -this.radius * 1.2)
-        // Upper curve
-        bezierVertex(
-          cos(angle1) * this.radius * 0.3,
-          -this.radius * 0.9,
-          cos(angle1) * this.radius * 0.8,
-          -this.radius * 0.3,
-          cos(angle1) * this.radius * 1.1,
-          0
-        )
-        // Lower curve to bottom
-        bezierVertex(
-          cos(angle1) * this.radius * 0.9,
-          this.radius * 0.5,
-          cos(angle1) * this.radius * 0.4,
-          this.radius * 0.9,
+        // Draw panel as pie slice
+        noStroke()
+        arc(
           0,
-          this.radius * 1.1
-        )
-        // Back up the other side
-        bezierVertex(
-          cos(angle2) * this.radius * 0.4,
-          this.radius * 0.9,
-          cos(angle2) * this.radius * 0.9,
-          this.radius * 0.5,
-          cos(angle2) * this.radius * 1.1,
-          0
-        )
-        bezierVertex(
-          cos(angle2) * this.radius * 0.8,
-          -this.radius * 0.3,
-          cos(angle2) * this.radius * 0.3,
-          -this.radius * 0.9,
           0,
-          -this.radius * 1.2
+          this.radius * 2,
+          this.radius * 2,
+          -PI / numPanels,
+          PI / numPanels,
+          PIE
         )
-        endShape(CLOSE)
+
+        pop()
       }
 
-      // Panel seams/ropes
-      stroke(60, 40, 20, 100)
-      strokeWeight(0.5)
+      // Add panel seams (the ropes/stitching between panels)
+      stroke(60, 40, 20, 110)
+      strokeWeight(1)
       for (let i = 0; i < numPanels; i++) {
         let angle = (TWO_PI / numPanels) * i
-        // Vertical seam lines
-        beginShape()
-        noFill()
-        vertex(0, -this.radius * 1.2)
-        bezierVertex(
-          cos(angle) * this.radius * 0.3,
-          -this.radius * 0.9,
-          cos(angle) * this.radius * 0.8,
-          -this.radius * 0.3,
-          cos(angle) * this.radius * 1.1,
-          0
-        )
-        bezierVertex(
-          cos(angle) * this.radius * 0.9,
-          this.radius * 0.5,
-          cos(angle) * this.radius * 0.4,
-          this.radius * 0.9,
-          0,
-          this.radius * 1.1
-        )
-        endShape()
+        let x1 = cos(angle) * this.radius * 0.2
+        let y1 = sin(angle) * this.radius * 0.2
+        let x2 = cos(angle) * this.radius * 0.95
+        let y2 = sin(angle) * this.radius * 0.95
+        line(x1, y1, x2, y2)
       }
 
-      // Highlight on balloon
-      noStroke()
-      fill(255, 255, 255, 80)
-      ellipse(
-        -this.radius * 0.3,
-        -this.radius * 0.5,
-        this.radius * 0.6,
-        this.radius * 0.7
-      )
-      pop()
+      // Add circular reinforcement bands
+      noFill()
+      stroke(80, 50, 30, 80)
+      strokeWeight(1.5)
+      ellipse(0, 0, this.radius * 1.4)
+      ellipse(0, 0, this.radius * 0.8)
 
-      // FLAME EFFECT!
-      push()
-      translate(0, this.radius - 5)
-      // Flame glow
+      // Matte fabric shading (subtle, non-glossy)
       noStroke()
-      fill(255, 200, 0, 40 + sin(frameCount * 0.3) * 20)
-      ellipse(0, 0, 25, 25)
-      fill(255, 150, 0, 60 + sin(frameCount * 0.4) * 30)
-      ellipse(0, 0, 15, 18)
-      // Flame itself
-      fill(255, 200, 0)
-      push()
-      let flameHeight = 8 + sin(frameCount * 0.5) * 3
-      translate(0, -2)
-      beginShape()
-      vertex(-3, 0)
-      bezierVertex(
-        -3,
-        -flameHeight * 0.7,
-        -1,
-        -flameHeight,
-        0,
-        -flameHeight * 1.2
-      )
-      bezierVertex(1, -flameHeight, 3, -flameHeight * 0.7, 3, 0)
-      endShape(CLOSE)
-      fill(255, 255, 200)
-      ellipse(0, -flameHeight * 0.5, 3, 4)
-      pop()
-      pop()
+      // Soft radial shading toward top-left to imply ambient light without specular shine
+      for (let r = this.radius * 1.2; r > this.radius * 0.2; r -= this.radius * 0.15) {
+        fill(255, 255, 255, 8) // very low alpha
+        ellipse(-this.radius * 0.25, -this.radius * 0.35, r * 0.25, r * 0.18)
+      }
+      // Global matte overlay to reduce plastic look
+      noStroke()
+      fill(230, 210, 190, 18)
+      ellipse(0, 0, this.radius * 2, this.radius * 2)
 
-      // Basket
+      // Bottom opening of balloon (where flame goes)
+      fill(40, 20, 10)
+      ellipse(0, this.radius * 0.9, this.radius * 0.4, this.radius * 0.15)
+
+      // Support ropes from balloon to basket
+      stroke(80, 60, 40)
+      strokeWeight(2)
+      // Four support ropes
+      line(-this.radius * 0.3, this.radius * 0.85, -8, this.radius + 20)
+      line(this.radius * 0.3, this.radius * 0.85, 8, this.radius + 20)
+      line(-this.radius * 0.15, this.radius * 0.9, -4, this.radius + 20)
+      line(this.radius * 0.15, this.radius * 0.9, 4, this.radius + 20)
+
+      // FLAME EFFECT (between balloon and basket)
       push()
       translate(0, this.radius + 10)
-      fill(101, 67, 33)
-      stroke(80, 50, 20)
-      strokeWeight(1)
-      // Woven basket shape
+
+      // Flame glow
+      noStroke()
+      fill(255, 200, 0, 30 + sin(frameCount * 0.2) * 20)
+      ellipse(0, 0, 30, 30)
+      fill(255, 150, 0, 50 + sin(frameCount * 0.3) * 30)
+      ellipse(0, 0, 20, 25)
+
+      // Animated flame
+      push()
+      let flameHeight = 12 + sin(frameCount * 0.4) * 4
+      let flameWave = sin(frameCount * 0.3) * 2
+
+      // Outer flame (orange)
+      fill(255, 150, 0)
       beginShape()
-      vertex(-8, 0)
-      vertex(8, 0)
-      vertex(6, 10)
-      vertex(-6, 10)
+      vertex(-5, 5)
+      bezierVertex(
+        -5 + flameWave,
+        -flameHeight * 0.5,
+        -2 + flameWave,
+        -flameHeight * 0.8,
+        flameWave,
+        -flameHeight
+      )
+      bezierVertex(
+        2 + flameWave,
+        -flameHeight * 0.8,
+        5 + flameWave,
+        -flameHeight * 0.5,
+        5,
+        5
+      )
       endShape(CLOSE)
-      // Basket weave pattern
-      stroke(80, 50, 20, 150)
-      for (let i = -6; i < 6; i += 2) {
-        line(i, 1, i, 9)
-      }
-      for (let i = 2; i < 9; i += 2) {
-        line(-6, i, 6, i)
-      }
-      // Basket rim
-      stroke(60, 40, 20)
-      strokeWeight(1.5)
-      line(-8, 0, 8, 0)
+
+      // Inner flame (yellow/white)
+      fill(255, 255, 150)
+      beginShape()
+      vertex(-2, 5)
+      bezierVertex(
+        -2 + flameWave * 0.5,
+        -flameHeight * 0.3,
+        -1 + flameWave * 0.5,
+        -flameHeight * 0.5,
+        flameWave * 0.5,
+        -flameHeight * 0.7
+      )
+      bezierVertex(
+        1 + flameWave * 0.5,
+        -flameHeight * 0.5,
+        2 + flameWave * 0.5,
+        -flameHeight * 0.3,
+        2,
+        5
+      )
+      endShape(CLOSE)
+
+      // Flame tip (bright white)
+      fill(255, 255, 255)
+      ellipse(flameWave * 0.5, -flameHeight * 0.5, 3, 5)
       pop()
 
-      // Ant in basket (peeking over edge)
+      pop()
+
+      // BIGGER, MORE DETAILED BASKET
       push()
-      translate(0, this.radius + 12)
+      translate(0, this.radius + 25)
+
+      // Basket shadow
+      noStroke()
+      fill(0, 0, 0, 20)
+      rect(-11, 2, 22, 15, 2)
+
+      // Main basket - bigger to see ant better
+      fill(101, 67, 33)
+      stroke(80, 50, 20)
+      strokeWeight(1.5)
+      rect(-10, 0, 20, 14, 2) // Bigger basket
+
+      // Woven basket texture
+      stroke(80, 50, 20, 150)
+      strokeWeight(1)
+      // Vertical weaves
+      for (let i = -8; i < 8; i += 3) {
+        line(i, 1, i, 13)
+      }
+      // Horizontal weaves
+      for (let i = 3; i < 12; i += 3) {
+        line(-9, i, 9, i)
+      }
+
+      // Basket rim (thicker, more pronounced)
+      stroke(60, 40, 20)
+      strokeWeight(2)
+      line(-10, 0, 10, 0)
+
+      // Corner reinforcements
+      fill(80, 50, 20)
+      noStroke()
+      ellipse(-9, 0, 3)
+      ellipse(9, 0, 3)
+
+      pop()
+
+      // DETAILED ANT PILOT (bigger, more visible)
+      push()
+      translate(0, this.radius + 28)
+
+      // Ant body
       fill(20)
       noStroke()
-      // Just ant head and antennae visible
-      ellipse(0, -2, 6, 4) // Head peeking up
+      ellipse(0, 0, 8, 5) // Thorax
+      ellipse(0, -3, 6, 5) // Head
+      ellipse(0, 3, 7, 6) // Abdomen
+
+      // Ant eyes
+      fill(255, 100, 100)
+      ellipse(-2, -3, 2)
+      ellipse(2, -3, 2)
+
       // Antennae
       stroke(20)
-      strokeWeight(0.5)
-      line(-1, -3, -3, -6)
-      line(1, -3, 3, -6)
-      // Tiny ant arms gripping basket edge
       strokeWeight(1)
-      line(-3, 0, -4, 2)
-      line(3, 0, 4, 2)
+      line(-1, -5, -3, -8)
+      line(1, -5, 3, -8)
+
+      // Little ant arms holding basket edge
+      strokeWeight(1.5)
+      line(-3, 0, -6, -3)
+      line(3, 0, 6, -3)
+
+      // Ant legs visible over basket edge
+      line(-2, 2, -4, 5)
+      line(2, 2, 4, 5)
+
+      // Optional: Tiny pilot goggles
+      stroke(100, 50, 0)
+      strokeWeight(1)
+      noFill()
+      ellipse(-2, -3, 3)
+      ellipse(2, -3, 3)
+      line(-0.5, -3, 0.5, -3)
+
+      pop()
+
+      // Sandbags hanging from basket (optional detail)
+      push()
+      translate(0, this.radius + 25)
+      fill(80, 60, 40)
+      noStroke()
+      ellipse(-12, 10, 4, 5)
+      ellipse(12, 10, 4, 5)
+      // Sandbag ropes
+      stroke(60, 40, 20)
+      strokeWeight(0.5)
+      line(-10, 7, -12, 10)
+      line(10, 7, 12, 10)
       pop()
 
       pop()
     } else if (this.type === 'beetle') {
-      // Big floating beetle!
+      // Big floating beetle! (KEEP EXISTING CODE)
       push()
       rotate(this.rotation)
 
@@ -1264,11 +1320,9 @@ class Obstacle {
       ellipse(this.radius * 0.2, this.radius * 0.4, this.radius * 0.35)
       ellipse(-this.radius * 0.25, this.radius * 0.3, this.radius * 0.25)
 
-      // No legs - they're flying!
-      // Just small leg stubs tucked under the body
+      // Tiny tucked legs
       stroke(0)
       strokeWeight(1)
-      // Tiny tucked legs
       line(
         -this.radius * 0.5,
         -this.radius * 0.2,
@@ -1299,7 +1353,7 @@ class Obstacle {
       line(-3, -this.radius * 1.1, -8, -this.radius * 1.4)
       line(3, -this.radius * 1.1, 8, -this.radius * 1.4)
 
-      // Eyes (bigger and more prominent)
+      // Eyes
       fill(255, 0, 0)
       noStroke()
       ellipse(-5, -this.radius * 0.7, 5)
@@ -1311,7 +1365,7 @@ class Obstacle {
 
       pop()
     } else if (this.type === 'leaf') {
-      // Original leaf code
+      // Original leaf code (KEEP EXISTING)
       rotate(this.rotation)
 
       if (gamePhase === 'NIGHT') {
@@ -1348,38 +1402,6 @@ class Obstacle {
       line(0, 0, this.radius / 2, -this.radius / 2)
       line(0, 0, -this.radius / 2, this.radius / 2)
       line(0, 0, this.radius / 2, this.radius / 2)
-    } else if (this.type === 'branch') {
-      // Keep old branch code for backwards compatibility
-      rotate(this.rotation)
-
-      if (gamePhase === 'NIGHT') {
-        stroke(40, 20, 0)
-        fill(50, 25, 5)
-      } else {
-        stroke(101, 67, 33)
-        fill(139, 90, 43)
-      }
-      strokeWeight(3)
-
-      push()
-      strokeWeight(this.radius / 3)
-      line(-this.radius, 0, this.radius, 0)
-
-      strokeWeight(2)
-      line(-this.radius / 2, 0, -this.radius / 2 - 10, -10)
-      line(this.radius / 3, 0, this.radius / 3 + 8, -8)
-      line(0, 0, 5, -15)
-
-      stroke(80, 50, 20, 100)
-      strokeWeight(1)
-      for (let i = -this.radius; i < this.radius; i += 5) {
-        line(i, -2, i + 2, 2)
-      }
-      pop()
-
-      noStroke()
-      fill(255, 255, 255, 30)
-      ellipse(0, 0, this.radius * 2)
     }
 
     pop()

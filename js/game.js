@@ -473,23 +473,27 @@ function setup () {
   let numObstacles = Math.floor((width * height) / 60000) // More obstacles
   numObstacles = constrain(numObstacles, 15, 25)
 
-  // Create ant balloons (4-6)
-  let numBalloons = Math.floor(random(4, 7))
+  // Create ant balloons
+  let numBalloons = Math.floor(random(11, 15))
   for (let i = 0; i < numBalloons; i++) {
     let attempts = 0
     let placed = false
 
     while (!placed && attempts < 30) {
-      let x = random(80, width - 80)
-      let y = random(60, height * 0.55) // Balloons float in upper half
-      let radius = random(35, 45) // Good size for hopping
+      // Distribute balloons more evenly across the screen
+      let gridX = (i % 3) * (width / 3) + random(50, width / 3 - 50)
+      let gridY = Math.floor(i / 3) * (height / 4) + random(40, height / 4)
+
+      let x = constrain(gridX, 80, width - 80)
+      let y = constrain(gridY, 60, height * 0.6) // Balloons in upper 60% of screen
+      let radius = random(35, 50) // Varied sizes for visual interest
 
       let valid = true
       // Check distance from other obstacles
       for (let obstacle of obstacles) {
         if (
           dist(x, y, obstacle.x, obstacle.y) <
-          radius + obstacle.radius + 50
+          radius + obstacle.radius + 40
         ) {
           valid = false
           break
@@ -499,7 +503,7 @@ function setup () {
       // Check distance from home branch
       if (valid && window.homeBranch) {
         let branchY = window.homeBranch.y
-        if (Math.abs(y - branchY) < radius + 35) {
+        if (Math.abs(y - branchY) < radius + 40) {
           valid = false
         }
       }
@@ -512,22 +516,27 @@ function setup () {
     }
   }
 
-  // Create beetles (3-5)
-  let numBeetles = Math.floor(random(3, 6))
+  // Create beetles
+  let numBeetles = Math.floor(random(8, 11))
   for (let i = 0; i < numBeetles; i++) {
     let attempts = 0
     let placed = false
 
     while (!placed && attempts < 30) {
-      let x = random(70, width - 70)
-      let y = random(height * 0.2, height * 0.8) // Spread throughout middle/lower
-      let radius = random(30, 40)
+      // Beetles spread throughout middle and lower areas
+      let gridX = (i % 3) * (width / 3) + random(60, width / 3 - 60)
+      let gridY =
+        height * 0.3 + Math.floor(i / 3) * (height * 0.25) + random(-30, 30)
+
+      let x = constrain(gridX, 70, width - 70)
+      let y = constrain(gridY, height * 0.2, height * 0.85)
+      let radius = random(28, 42) // Varied beetle sizes
 
       let valid = true
       for (let obstacle of obstacles) {
         if (
           dist(x, y, obstacle.x, obstacle.y) <
-          radius + obstacle.radius + 45
+          radius + obstacle.radius + 35
         ) {
           valid = false
           break
@@ -550,25 +559,34 @@ function setup () {
     }
   }
 
-  // Create LOTS of leaves (8-12) for excellent hopping coverage
-  let numLeaves = Math.floor(random(8, 13))
+  // Create LESS leaves. they're unrealistic!
+  let numLeaves = Math.floor(random(4, 7))
   for (let i = 0; i < numLeaves; i++) {
     let attempts = 0
     let placed = false
 
     while (!placed && attempts < 30) {
-      // Distribute leaves more evenly across the screen
-      let gridX = (i % 4) * (width / 4) + random(50, width / 4 - 50)
-      let gridY = Math.floor(i / 4) * (height / 3) + random(50, height / 3 - 50)
-      let x = constrain(gridX, 50, width - 50)
-      let y = constrain(gridY, 60, height - 100)
-      let radius = random(20, 30)
+      // Place leaves strategically to fill gaps
+      let x, y
+
+      // Try to place leaves in areas not covered by balloons/beetles
+      if (i < 2) {
+        // Place some near edges for web anchoring
+        x = random() < 0.5 ? random(30, 100) : random(width - 100, width - 30)
+        y = random(height * 0.3, height * 0.7)
+      } else {
+        // Fill gaps in the middle
+        x = random(100, width - 100)
+        y = random(height * 0.4, height - 100)
+      }
+
+      let radius = random(22, 32) // Leaves stay relatively small
 
       let valid = true
       for (let obstacle of obstacles) {
         if (
           dist(x, y, obstacle.x, obstacle.y) <
-          radius + obstacle.radius + 35
+          radius + obstacle.radius + 30
         ) {
           valid = false
           break
@@ -583,44 +601,72 @@ function setup () {
     }
   }
 
-  // Add even more guaranteed coverage points (smaller leaves)
-  // Corners
-  obstacles.push(new Obstacle(50, 80, 18, 'leaf'))
-  obstacles.push(new Obstacle(width - 50, 80, 18, 'leaf'))
-  obstacles.push(new Obstacle(50, height - 100, 18, 'leaf'))
-  obstacles.push(new Obstacle(width - 50, height - 100, 18, 'leaf'))
+  let anchorPoints = [
+    { x: 50, y: height * 0.25 },
+    { x: width - 50, y: height * 0.25 },
+    { x: 50, y: height * 0.75 },
+    { x: width - 50, y: height * 0.75 },
+    { x: width * 0.5, y: 50 },
+    { x: width * 0.5, y: height - 80 }
+  ]
 
-  // Edge midpoints
-  obstacles.push(new Obstacle(35, height / 3, 18, 'leaf'))
-  obstacles.push(new Obstacle(35, (2 * height) / 3, 18, 'leaf'))
-  obstacles.push(new Obstacle(width - 35, height / 3, 18, 'leaf'))
-  obstacles.push(new Obstacle(width - 35, (2 * height) / 3, 18, 'leaf'))
-  obstacles.push(new Obstacle(width / 3, 45, 18, 'leaf'))
-  obstacles.push(new Obstacle((2 * width) / 3, 45, 18, 'leaf'))
-  obstacles.push(new Obstacle(width / 3, height - 90, 18, 'leaf'))
-  obstacles.push(new Obstacle((2 * width) / 3, height - 90, 18, 'leaf'))
-
-  // Fill any remaining gaps for smooth hopping
-  if (width > 600) {
-    // Create a grid of small leaves to ensure no dead zones
-    for (let x = width / 5; x < width; x += width / 5) {
-      for (let y = height / 4; y < height - 100; y += height / 4) {
-        // Check if there's already an obstacle nearby
-        let needsLeaf = true
-        for (let obstacle of obstacles) {
-          if (dist(x, y, obstacle.x, obstacle.y) < 80) {
-            needsLeaf = false
-            break
-          }
-        }
-        if (needsLeaf) {
-          obstacles.push(
-            new Obstacle(x + random(-20, 20), y + random(-20, 20), 15, 'leaf')
-          )
-        }
+  for (let point of anchorPoints) {
+    // Check if there's already an obstacle nearby
+    let needsAnchor = true
+    for (let obstacle of obstacles) {
+      if (dist(point.x, point.y, obstacle.x, obstacle.y) < 60) {
+        needsAnchor = false
+        break
       }
     }
+
+    if (needsAnchor) {
+      obstacles.push(
+        new Obstacle(
+          point.x + random(-15, 15),
+          point.y + random(-15, 15),
+          18,
+          'leaf'
+        )
+      )
+    }
   }
+
+  if (random() < 0.5) {
+    let attempts = 0
+    let placed = false
+
+    while (!placed && attempts < 20) {
+      let x = random(width * 0.3, width * 0.7)
+      let y = random(height * 0.2, height * 0.4)
+      let radius = random(55, 65) // Extra large balloon
+
+      let valid = true
+      for (let obstacle of obstacles) {
+        if (
+          dist(x, y, obstacle.x, obstacle.y) <
+          radius + obstacle.radius + 60
+        ) {
+          valid = false
+          break
+        }
+      }
+
+      if (valid) {
+        obstacles.push(new Obstacle(x, y, radius, 'balloon'))
+        placed = true
+      }
+      attempts++
+    }
+  }
+
+  // Debug: Log obstacle distribution
+  let balloonCount = obstacles.filter(o => o.type === 'balloon').length
+  let beetleCount = obstacles.filter(o => o.type === 'beetle').length
+  let leafCount = obstacles.filter(o => o.type === 'leaf').length
+  console.log(
+    `Obstacles created - Balloons: ${balloonCount}, Beetles: ${beetleCount}, Leaves: ${leafCount}`
+  )
 
   // Spawn initial food boxes
   let numBoxes = Math.max(3, Math.floor(width / 400))
@@ -2764,32 +2810,35 @@ function keyPressed () {
   }
 }
 
-function keyReleased() {
-    if (key === ' ') {
-        spacePressed = false;
-        
-        // FIX: Check if web is floating when released
-        if (isDeployingWeb && currentStrand && spider.isAirborne) {
-            // Spider is still airborne - this would create a floating web
-            // Remove the incomplete strand
-            if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
-                webStrands.pop();
-                
-                // Poof effect
-                for (let i = 0; i < 5; i++) {
-                    let p = new Particle(spider.pos.x, spider.pos.y);
-                    p.color = color(255, 200, 200, 100);
-                    p.vel = createVector(random(-2, 2), random(-2, 2));
-                    p.size = 3;
-                    particles.push(p);
-                }
-            }
+function keyReleased () {
+  if (key === ' ') {
+    spacePressed = false
+
+    // FIX: Check if web is floating when released
+    if (isDeployingWeb && currentStrand && spider.isAirborne) {
+      // Spider is still airborne - this would create a floating web
+      // Remove the incomplete strand
+      if (
+        webStrands.length > 0 &&
+        webStrands[webStrands.length - 1] === currentStrand
+      ) {
+        webStrands.pop()
+
+        // Poof effect
+        for (let i = 0; i < 5; i++) {
+          let p = new Particle(spider.pos.x, spider.pos.y)
+          p.color = color(255, 200, 200, 100)
+          p.vel = createVector(random(-2, 2), random(-2, 2))
+          p.size = 3
+          particles.push(p)
         }
-        
-        isDeployingWeb = false;
-        currentStrand = null;
-        return false;
+      }
     }
+
+    isDeployingWeb = false
+    currentStrand = null
+    return false
+  }
 }
 
 function mousePressed () {
@@ -2939,39 +2988,60 @@ function touchMoved () {
   return false // Prevent default
 }
 
-function touchEnded() {
-    touchHolding = false;
-    touchProcessing = false;
-    
-    // Power jump handling...
-    if (chargingJump && !spider.isAirborne) {
-        // ... existing power jump code ...
+function touchEnded () {
+  touchHolding = false
+  touchProcessing = false
+
+  // PHASE 3: Power Jump - release charged jump
+  if (chargingJump && !spider.isAirborne) {
+    let chargeRatio = min(jumpChargeTime / maxJumpCharge, 1)
+    let chargeMultiplier = 1 + chargeRatio // 1x to 2x multiplier
+    spider.jumpChargeVisual = 0
+
+    // Use touch position if available, otherwise use last known position
+    let targetX = touches.length > 0 ? touches[0].x : touchStartX
+    let targetY = touches.length > 0 ? touches[0].y : touchStartY
+    spider.jump(targetX, targetY, chargeMultiplier)
+
+    // Create charge release particles
+    if (chargeRatio > 0.5) {
+      for (let i = 0; i < 10; i++) {
+        let p = new Particle(spider.pos.x, spider.pos.y)
+        p.color = color(255, 255, 100)
+        p.vel = createVector(random(-3, 3), random(-1, 2))
+        p.size = 5
+        particles.push(p)
+      }
     }
-    chargingJump = false;
-    jumpChargeTime = 0;
-    
-    // FIX: Check if web is floating when touch released
-    if (isDeployingWeb && currentStrand && spider.isAirborne) {
-        // Spider is still airborne - this would create a floating web
-        // Remove the incomplete strand
-        if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
-            webStrands.pop();
-            
-            // Poof effect
-            for (let i = 0; i < 5; i++) {
-                let p = new Particle(spider.pos.x, spider.pos.y);
-                p.color = color(255, 200, 200, 100);
-                p.vel = createVector(random(-2, 2), random(-2, 2));
-                p.size = 3;
-                particles.push(p);
-            }
-        }
+  }
+  chargingJump = false
+  jumpChargeTime = 0
+
+  // FIX: Check if web is floating when touch released
+  if (isDeployingWeb && currentStrand && spider.isAirborne) {
+    // Spider is still airborne - this would create a floating web
+    // Remove the incomplete strand
+    if (
+      webStrands.length > 0 &&
+      webStrands[webStrands.length - 1] === currentStrand
+    ) {
+      webStrands.pop()
+
+      // Poof effect
+      for (let i = 0; i < 5; i++) {
+        let p = new Particle(spider.pos.x, spider.pos.y)
+        p.color = color(255, 200, 200, 100)
+        p.vel = createVector(random(-2, 2), random(-2, 2))
+        p.size = 3
+        particles.push(p)
+      }
     }
-    
-    isDeployingWeb = false;
-    currentStrand = null;
-    
-    return false;
+  }
+
+  isDeployingWeb = false
+  currentStrand = null
+
+  return false
 }
 
 function windowResized () {
