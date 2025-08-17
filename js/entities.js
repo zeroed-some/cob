@@ -513,78 +513,78 @@ class Fly {
     }
   }
 
-    checkWebCollisions() {
-    let currentlyTouching = new Set();
+  checkWebCollisions () {
+    let currentlyTouching = new Set()
 
     for (let strand of webStrands) {
-      let touching = false;
+      let touching = false
 
       // Check collision with strand path
       if (strand.path && strand.path.length > 1) {
         // OPTIMIZATION: Skip every other point for collision detection
         for (let i = 0; i < strand.path.length - 1; i += 2) {
-          let p1 = strand.path[i];
-          let p2 = strand.path[Math.min(i + 1, strand.path.length - 1)];
-          let d = this.pointToLineDistance(this.pos, p1, p2);
+          let p1 = strand.path[i]
+          let p2 = strand.path[Math.min(i + 1, strand.path.length - 1)]
+          let d = this.pointToLineDistance(this.pos, p1, p2)
           if (d < this.radius + 3) {
-            touching = true;
-            break;
+            touching = true
+            break
           }
         }
       } else if (strand.start && strand.end) {
         // Fallback for strands without path
-        let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
+        let d = this.pointToLineDistance(this.pos, strand.start, strand.end)
         if (d < this.radius + 3) {
-          touching = true;
+          touching = true
         }
       }
 
       if (touching) {
-        currentlyTouching.add(strand);
+        currentlyTouching.add(strand)
 
         // If this is a new strand we're touching
         if (!this.touchedStrands.has(strand)) {
-          this.touchedStrands.add(strand);
+          this.touchedStrands.add(strand)
 
           // Vibrate the web when first touching
-          strand.vibrate(3);
+          strand.vibrate(3)
 
           // First strand slows us down
           if (this.touchedStrands.size === 1) {
-            this.currentSpeed = this.baseSpeed * 0.4; // Slow to 40% speed
-            this.slowedBy.add(strand);
+            this.currentSpeed = this.baseSpeed * 0.4 // Slow to 40% speed
+            this.slowedBy.add(strand)
 
             // Visual feedback - yellow particles for slowing
             // LIMIT PARTICLES TO PREVENT FREEZE
-            let particleCount = Math.min(3, 100 - particles.length);
+            let particleCount = Math.min(3, 100 - particles.length)
             for (let j = 0; j < particleCount; j++) {
-              let p = new Particle(this.pos.x, this.pos.y);
-              p.color = color(255, 255, 0, 150);
-              p.vel = createVector(random(-1, 1), random(-1, 1));
-              p.size = 3;
-              particles.push(p);
+              let p = new Particle(this.pos.x, this.pos.y)
+              p.color = color(255, 255, 0, 150)
+              p.vel = createVector(random(-1, 1), random(-1, 1))
+              p.size = 3
+              particles.push(p)
             }
           }
           // Second strand catches us
           else if (this.touchedStrands.size >= 2 && !this.caught) {
-            this.caught = true;
-            this.currentSpeed = 0;
+            this.caught = true
+            this.currentSpeed = 0
 
             // Stronger vibration when caught
-            strand.vibrate(8);
+            strand.vibrate(8)
 
             // FIX: OPTIMIZE NEARBY STRAND VIBRATION
             // This is likely the main cause of the freeze - checking distances between all strands
             // Use a more efficient method
-            propagateVibration(strand, 2);
+            propagateVibration(strand, 2)
 
             // Create caught particles - LIMIT TO PREVENT FREEZE
-            let particleCount = Math.min(6, 100 - particles.length);
+            let particleCount = Math.min(6, 100 - particles.length)
             for (let j = 0; j < particleCount; j++) {
-              let p = new Particle(this.pos.x, this.pos.y);
-              p.color = color(255, 200, 0, 200);
-              p.vel = createVector(random(-2, 2), random(-2, 2));
-              particles.push(p);
+              let p = new Particle(this.pos.x, this.pos.y)
+              p.color = color(255, 200, 0, 200)
+              p.vel = createVector(random(-2, 2), random(-2, 2))
+              particles.push(p)
             }
           }
         }
@@ -593,32 +593,34 @@ class Fly {
 
     // If we're no longer touching strands we were slowed by, speed back up
     if (this.slowedBy.size > 0 && currentlyTouching.size === 0) {
-      this.currentSpeed = this.baseSpeed;
-      this.slowedBy.clear();
+      this.currentSpeed = this.baseSpeed
+      this.slowedBy.clear()
     }
   }
 
-  pointToLineDistance(point, lineStart, lineEnd) {
+  pointToLineDistance (point, lineStart, lineEnd) {
     // Add null checks
-    if (!point || !lineStart || !lineEnd) return Infinity;
-    
-    let dx = lineEnd.x - lineStart.x;
-    let dy = lineEnd.y - lineStart.y;
-    let lineLength = sqrt(dx * dx + dy * dy);
-    
+    if (!point || !lineStart || !lineEnd) return Infinity
+
+    let dx = lineEnd.x - lineStart.x
+    let dy = lineEnd.y - lineStart.y
+    let lineLength = sqrt(dx * dx + dy * dy)
+
     // If line has no length, return distance to point
     if (lineLength < 0.01) {
-      return dist(point.x, point.y, lineStart.x, lineStart.y);
+      return dist(point.x, point.y, lineStart.x, lineStart.y)
     }
-    
+
     // Use optimized calculation without creating new vectors
-    let t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (lineLength * lineLength);
-    t = constrain(t, 0, 1);
-    
-    let closestX = lineStart.x + t * dx;
-    let closestY = lineStart.y + t * dy;
-    
-    return dist(point.x, point.y, closestX, closestY);
+    let t =
+      ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) /
+      (lineLength * lineLength)
+    t = constrain(t, 0, 1)
+
+    let closestX = lineStart.x + t * dx
+    let closestY = lineStart.y + t * dy
+
+    return dist(point.x, point.y, closestX, closestY)
   }
 
   display () {
@@ -1374,379 +1376,512 @@ class FoodBox {
 }
 
 class Bird {
-    constructor(pattern, isThief = false) {
-        this.pattern = pattern; // 'dive', 'swoop', 'glide', 'circle'
-        this.isThief = isThief;
-        this.active = false;
-        this.attacking = false;
-        this.attackDelay = isThief ? 120 : random(30, 90); // MUCH shorter initial delay
-        
-        // Position and movement
-        this.x = random(width);
-        this.y = -50; // Start above screen
-        this.vx = 0;
-        this.vy = 0;
-        this.targetX = 0;
-        this.targetY = 0;
-        this.speed = 5; // Increased from 3
-        this.angle = 0;
-        this.wingPhase = random(TWO_PI);
-        
-        // Visual properties
-        this.size = isThief ? 25 : 20;
-        this.color = isThief ? color(100, 50, 150) : color(50, 50, 50);
-        
-        // Pattern-specific properties
-        if (pattern === 'circle') {
-            this.circleRadius = 150;
-            this.circleAngle = 0;
-            this.circleCenter = createVector(width/2, height/2);
-        }
-        
-        // Attack properties - MUCH MORE AGGRESSIVE
-        this.diveSpeed = 12; // Increased from 8
-        this.retreatSpeed = 6; // Increased from 4
-        this.state = 'waiting'; // 'waiting', 'approaching', 'attacking', 'retreating'
-        this.consecutiveAttacks = 0; // Track multiple attacks
-        this.maxConsecutiveAttacks = random(2, 4); // Each bird does 2-4 attacks before retreating
-    }
-    
-    update() {
-        // Update wing animation
-        this.wingPhase += 0.3; // Faster wing flapping
-        
-        // Countdown to attack - MUCH FASTER
-        if (this.attackDelay > 0) {
-            this.attackDelay--;
-            // Hover while waiting - more aggressive hovering
-            this.y = -30 + sin(frameCount * 0.08) * 15;
-            this.x += sin(frameCount * 0.05) * 3;
-            
-            // Show warning when about to attack
-            if (this.attackDelay < 30) {
-                this.y = lerp(this.y, 50, 0.1); // Start moving into view
-            }
-            return;
-        }
-        
-        // Activate after delay
-        if (!this.active) {
-            this.active = true;
-            this.state = 'approaching';
-            this.updateTarget(); // Set initial target
-        }
-        
-        // Execute movement pattern
-        switch(this.pattern) {
-            case 'dive':
-                this.executeDivePattern();
-                break;
-            case 'swoop':
-                this.executeSwoopPattern();
-                break;
-            case 'glide':
-                this.executeGlidePattern();
-                break;
-            case 'circle':
-                this.executeCirclePattern();
-                break;
-        }
-        
-        // Check collisions
-        this.checkCollisions();
-        
-        // Keep on screen during approach
-        if (this.state === 'approaching') {
-            this.x = constrain(this.x, 20, width - 20);
-        }
-    }
-    
-    updateTarget() {
-        if (this.isThief) {
-            // Target caught flies
-            let caughtFlies = flies.filter(f => f.stuck || f.caught);
-            if (caughtFlies.length > 0) {
-                let target = random(caughtFlies);
-                this.targetX = target.pos.x;
-                this.targetY = target.pos.y;
-            } else {
-                this.active = false; // No targets, deactivate
-                return;
-            }
-        } else {
-            // Heavily favor targeting spider (90% chance)
-            if (random() < 0.9) {
-                // Target spider with prediction
-                this.targetX = spider.pos.x + spider.vel.x * 10; // Predict where spider will be
-                this.targetY = spider.pos.y + spider.vel.y * 10;
-            } else {
-                // Occasionally target a web strand
-                if (webStrands.length > 0) {
-                    let strand = random(webStrands.filter(s => !s.broken));
-                    if (strand && strand.path && strand.path.length > 0) {
-                        let point = random(strand.path);
-                        this.targetX = point.x;
-                        this.targetY = point.y;
-                    }
-                }
-            }
-        }
-    }
-    
-    executeDivePattern() {
-        if (this.state === 'approaching') {
-            // Move into position above target MUCH FASTER
-            let dx = this.targetX - this.x;
-            let dy = 50 - this.y; // Lower starting position for faster attack
-            
-            this.x += dx * 0.15; // Much faster positioning
-            this.y += dy * 0.15;
-            
-            // When in position, start diving immediately
-            if (abs(dx) < 50 && abs(dy) < 30) {
-                this.state = 'attacking';
-                this.attacking = true;
-                this.updateTarget(); // Update target position for more accurate dive
-            }
-        } else if (this.state === 'attacking') {
-            // FAST dive toward target
-            let dx = this.targetX - this.x;
-            this.vy = this.diveSpeed;
-            this.vx = dx * 0.05; // Track horizontally too
-            this.x += this.vx;
-            this.y += this.vy;
-            
-            // Hit ground or passed target
-            if (this.y > this.targetY + 20 || this.y > height - 50) {
-                this.consecutiveAttacks++;
-                
-                // Do multiple attacks before retreating
-                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
-                    // Quick pull up and attack again
-                    this.state = 'approaching';
-                    this.attacking = false;
-                    this.y = min(this.y, height - 100); // Don't go too low
-                    this.updateTarget(); // Get new target position
-                } else {
-                    // Finally retreat after multiple attacks
-                    this.state = 'retreating';
-                    this.attacking = false;
-                }
-            }
-        } else if (this.state === 'retreating') {
-            // Fly back up faster
-            this.vy = -this.retreatSpeed;
-            this.y += this.vy;
-            this.x += sin(frameCount * 0.1) * 2; // Weave while retreating
-            
-            // Reset when off screen
-            if (this.y < -50) {
-                this.state = 'approaching';
-                this.attackDelay = random(60, 120); // Shorter delay between attack runs
-                this.x = random(width);
-                this.consecutiveAttacks = 0; // Reset attack counter
-                this.maxConsecutiveAttacks = random(2, 4); // Randomize next attack count
-            }
-        }
-    }
-    
-    executeSwoopPattern() {
-        if (this.state === 'approaching') {
-            // Come from the side FAST
-            if (this.x < 0) {
-                this.x += 8; // Faster approach
-                this.y = height * 0.3 + sin(this.x * 0.03) * 50;
-            } else {
-                this.state = 'attacking';
-                this.attacking = true;
-                this.updateTarget();
-            }
-        } else if (this.state === 'attacking') {
-            // Swoop across screen following sine wave but faster
-            this.x += 9; // Faster swoop
-            this.y = height * 0.3 + sin(this.x * 0.03) * 120;
-            
-            // Track toward target when close
-            if (abs(this.x - this.targetX) < 100) {
-                // Aggressively dive toward target
-                let dy = this.targetY - this.y;
-                this.y += dy * 0.2;
-            }
-            
-            // Exit screen
-            if (this.x > width + 50) {
-                this.consecutiveAttacks++;
-                
-                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
-                    // Come back from other side
-                    this.x = -50;
-                    this.state = 'approaching';
-                    this.updateTarget();
-                } else {
-                    this.state = 'retreating';
-                    this.attacking = false;
-                }
-            }
-        } else if (this.state === 'retreating') {
-            // Reset
-            this.state = 'approaching';
-            this.attackDelay = random(90, 150);
-            this.x = -50;
-            this.consecutiveAttacks = 0;
-            this.maxConsecutiveAttacks = random(2, 4);
-        }
-    }
-    
-    executeGlidePattern() {
-        if (this.state === 'approaching') {
-            // Glide in from top corner faster
-            this.x += 5;
-            this.y += 2.5;
-            
-            if (this.y > height * 0.15) {
-                this.state = 'attacking';
-                this.attacking = true;
-                this.updateTarget();
-            }
-        } else if (this.state === 'attacking') {
-            // Glide toward target aggressively
-            let dx = this.targetX - this.x;
-            let dy = this.targetY - this.y;
-            let dist = sqrt(dx * dx + dy * dy);
-            
-            if (dist > 10) {
-                this.x += (dx / dist) * 7; // Much faster glide
-                this.y += (dy / dist) * 7;
-            }
-            
-            // Pass through and maybe attack again
-            if (this.y > height - 100 || this.x < -50 || this.x > width + 50) {
-                this.consecutiveAttacks++;
-                
-                if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
-                    // Reset for another pass
-                    this.state = 'approaching';
-                    this.x = random() < 0.5 ? -50 : width + 50;
-                    this.y = random(50, 150);
-                    this.updateTarget();
-                } else {
-                    this.state = 'retreating';
-                    this.attacking = false;
-                }
-            }
-        } else if (this.state === 'retreating') {
-            // Continue off screen
-            this.x += this.vx;
-            this.y += this.vy;
-            
-            // Reset
-            if (this.y > height + 50 || this.x < -100 || this.x > width + 100) {
-                this.state = 'approaching';
-                this.attackDelay = random(120, 180);
-                this.x = random() < 0.5 ? -50 : width + 50;
-                this.y = random(50, 150);
-                this.vx = this.x < width/2 ? 5 : -5;
-                this.vy = 2.5;
-                this.consecutiveAttacks = 0;
-                this.maxConsecutiveAttacks = random(2, 4);
-            }
-        }
-    }
-    
-    executeCirclePattern() {
-        if (this.state === 'approaching') {
-            // Move to circle start position
-            let startX = this.circleCenter.x + cos(0) * this.circleRadius;
-            let startY = this.circleCenter.y + sin(0) * this.circleRadius;
-            
-            let dx = startX - this.x;
-            let dy = startY - this.y;
-            
-            this.x += dx * 0.1;
-            this.y += dy * 0.1;
-            
-            if (abs(dx) < 20 && abs(dy) < 20) {
-                this.state = 'attacking';
-                this.attacking = true;
-                this.circleAngle = 0;
-            }
-        } else if (this.state === 'attacking') {
-            // Circle around center FASTER
-            this.circleAngle += 0.08; // Faster circling
-            this.x = this.circleCenter.x + cos(this.circleAngle) * this.circleRadius;
-            this.y = this.circleCenter.y + sin(this.circleAngle) * this.circleRadius;
-            
-            // More frequent dives toward center
-            if (frameCount % 60 === 0) { // Every second instead of every 2 seconds
-                this.circleRadius = max(30, this.circleRadius - 50);
-            } else {
-                this.circleRadius = min(150, this.circleRadius + 2);
-            }
-            
-            // Complete circle faster
-            if (this.circleAngle > TWO_PI * 1.5) { // 1.5 circles instead of 2
-                this.state = 'retreating';
-                this.attacking = false;
-            }
-        } else if (this.state === 'retreating') {
-            // Fly away
-            this.y -= 7;
-            
-            if (this.y < -50) {
-                this.state = 'approaching';
-                this.attackDelay = random(150, 240);
-                this.x = random(width);
-            }
-        }
+  constructor (pattern, isThief = false) {
+    this.pattern = pattern // 'dive', 'swoop', 'glide', 'circle'
+    this.isThief = isThief
+    this.active = false
+    this.attacking = false
+    this.attackDelay = isThief ? 120 : random(30, 90) // MUCH shorter initial delay
+
+    // Position and movement
+    this.x = random(width)
+    this.y = -50 // Start above screen
+    this.vx = 0
+    this.vy = 0
+    this.targetX = 0
+    this.targetY = 0
+    this.speed = 5 // Increased from 3
+    this.angle = 0
+    this.wingPhase = random(TWO_PI)
+
+    // Visual properties
+    this.size = isThief ? 25 : 20
+    this.color = isThief ? color(100, 50, 150) : color(50, 50, 50)
+
+    // Pattern-specific properties
+    if (pattern === 'circle') {
+      this.circleRadius = 150
+      this.circleAngle = 0
+      this.circleCenter = createVector(width / 2, height / 2)
     }
 
-    checkCollisions() {
-        // Check collision with spider
-        if (this.attacking && dist(this.x, this.y, spider.pos.x, spider.pos.y) < this.size + spider.radius) {
-            // Hit spider!
-            if (gamePhase === 'DAWN') {
-                // Calculate damage based on remaining stamina
-                let damage = 20; // Base damage
-                
-                // If spider has no stamina, GAME OVER!
-                if (jumpStamina <= 0) {
-                    triggerGameOver('Exhausted spider caught by bird!');
-                    return;
-                }
-                
-                // Otherwise, reduce stamina
-                jumpStamina = max(0, jumpStamina - damage);
-                stats.birdHitsTaken++;
-                
-                // Knockback effect
-                spider.vel.x = (spider.pos.x - this.x) * 0.3;
-                spider.vel.y = -3;
-                spider.isAirborne = true;
-                
-                // Red damage particles
-                for (let i = 0; i < 12; i++) {
-                    let p = new Particle(spider.pos.x, spider.pos.y);
-                    p.color = color(255, 50, 50);
-                    p.vel = createVector(random(-4, 4), random(-4, 1));
-                    p.size = random(4, 8);
-                    particles.push(p);
-                }
-                
-                // Screen shake effect
-                screenShake = 10;
-                
-                // Warning notification if stamina is low
-                if (jumpStamina <= 20) {
-                    notifications.push(new Notification("CRITICAL STAMINA!", color(255, 50, 50)));
-                } else if (jumpStamina <= 40) {
-                    notifications.push(new Notification("Low stamina - find cover!", color(255, 150, 50)));
-                }
-            }
-            
-            // Bird bounces off
-            this.state = 'retreating';
-            this.attacking = false;
+    // Attack properties - MUCH MORE AGGRESSIVE
+    this.diveSpeed = 12 // Increased from 8
+    this.retreatSpeed = 6 // Increased from 4
+    this.state = 'waiting' // 'waiting', 'approaching', 'attacking', 'retreating'
+    this.consecutiveAttacks = 0 // Track multiple attacks
+    this.maxConsecutiveAttacks = random(2, 4) // Each bird does 2-4 attacks before retreating
+  }
+
+  update () {
+    // Update wing animation
+    this.wingPhase += 0.3 // Faster wing flapping
+
+    this.avoidObstacles()
+
+    // Countdown to attack - MUCH FASTER
+    if (this.attackDelay > 0) {
+      this.attackDelay--
+      // Hover while waiting - more aggressive hovering
+      this.y = -30 + sin(frameCount * 0.08) * 15
+      this.x += sin(frameCount * 0.05) * 3
+
+      // Show warning when about to attack
+      if (this.attackDelay < 30) {
+        this.y = lerp(this.y, 50, 0.1) // Start moving into view
+      }
+      return
+    }
+
+    // Activate after delay
+    if (!this.active) {
+      this.active = true
+      this.state = 'approaching'
+      this.updateTarget() // Set initial target
+    }
+
+    // Execute movement pattern
+    switch (this.pattern) {
+      case 'dive':
+        this.executeDivePattern()
+        break
+      case 'swoop':
+        this.executeSwoopPattern()
+        break
+      case 'glide':
+        this.executeGlidePattern()
+        break
+      case 'circle':
+        this.executeCirclePattern()
+        break
+    }
+
+    // Check collisions
+    this.checkCollisions()
+
+    // Keep on screen during approach
+    if (this.state === 'approaching') {
+      this.x = constrain(this.x, 20, width - 20)
+    }
+  }
+
+  updateTarget () {
+    if (this.isThief) {
+      // Target caught flies
+      let caughtFlies = flies.filter(f => f.stuck || f.caught)
+      if (caughtFlies.length > 0) {
+        let target = random(caughtFlies)
+        this.targetX = target.pos.x
+        this.targetY = target.pos.y
+      } else {
+        this.active = false // No targets, deactivate
+        return
+      }
+    } else {
+      // Heavily favor targeting spider (90% chance)
+      if (random() < 0.9) {
+        // Target spider with prediction
+        this.targetX = spider.pos.x + spider.vel.x * 10 // Predict where spider will be
+        this.targetY = spider.pos.y + spider.vel.y * 10
+      } else {
+        // Occasionally target a web strand
+        if (webStrands.length > 0) {
+          let strand = random(webStrands.filter(s => !s.broken))
+          if (strand && strand.path && strand.path.length > 0) {
+            let point = random(strand.path)
+            this.targetX = point.x
+            this.targetY = point.y
+          }
         }
+      }
+    }
+  }
+
+  executeDivePattern () {
+    if (this.state === 'approaching') {
+      // Move into position above target
+      let dx = this.targetX - this.x
+      let dy = 50 - this.y
+
+      this.x += dx * 0.15
+      this.y += dy * 0.15
+
+      // When in position, start diving
+      if (abs(dx) < 50 && abs(dy) < 30) {
+        this.state = 'attacking'
+        this.attacking = true
+        this.updateTarget()
+      }
+    } else if (this.state === 'attacking') {
+      // FIX: Better tracking dive that reaches bottom
+      let dx = this.targetX - this.x
+      let dy = this.targetY - this.y
+
+      // Accelerate toward target with better tracking
+      this.vx = dx * 0.1 // Better horizontal tracking
+      this.vy = min(this.diveSpeed * 1.5, this.vy + 1.5) // Faster acceleration
+
+      this.x += this.vx
+      this.y += this.vy
+
+      // Update target position while diving
+      if (frameCount % 8 === 0) {
+        this.targetX = spider.pos.x
+        this.targetY = spider.pos.y
+      }
+
+      // FIX: Extend dive range to reach bottom spiders
+      // Check if we've reached the target OR the absolute bottom
+      let reachedTarget = this.y > this.targetY - 10
+      let reachedBottom = this.y > height - 20 // Go almost to canvas bottom
+
+      // FIX: Also check if we're very close horizontally for bottom edge spiders
+      let closeToSpider = dist(this.x, this.y, spider.pos.x, spider.pos.y) < 50
+
+      if (reachedTarget || reachedBottom || closeToSpider) {
+        // FIX: If spider is at bottom and we haven't hit it yet, do a horizontal sweep
+        if (spider.pos.y > height - 30 && !closeToSpider && !this.sweeping) {
+          this.sweeping = true
+          this.y = spider.pos.y // Match spider height
+          this.vy = 0 // Stop vertical movement
+
+          // Sweep horizontally toward spider
+          let sweepDirection = spider.pos.x > this.x ? 1 : -1
+          this.vx = sweepDirection * 8
+
+          // Continue sweep for a bit
+          setTimeout(() => {
+            this.sweeping = false
+            this.state = 'retreating'
+            this.attacking = false
+          }, 500) // Sweep for 0.5 seconds
+        } else if (!this.sweeping) {
+          // Normal attack completion
+          this.consecutiveAttacks++
+
+          if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+            // Quick pull up and attack again
+            this.state = 'approaching'
+            this.attacking = false
+            this.y = min(this.y, height - 50)
+            this.updateTarget()
+          } else {
+            // Finally retreat
+            this.state = 'retreating'
+            this.attacking = false
+          }
+        }
+      }
+
+      // Safety: Don't go below canvas
+      if (this.y > height - 10) {
+        this.y = height - 10
+        if (!this.sweeping) {
+          this.state = 'retreating'
+          this.attacking = false
+        }
+      }
+    } else if (this.state === 'retreating') {
+      // Clear sweep flag
+      this.sweeping = false
+
+      // Fly back up
+      this.vy = -this.retreatSpeed
+      this.y += this.vy
+      this.x += sin(frameCount * 0.1) * 2
+
+      // Reset when off screen
+      if (this.y < -50) {
+        this.state = 'approaching'
+        this.attackDelay = random(60, 120)
+        this.x = random(width)
+        this.consecutiveAttacks = 0
+        this.maxConsecutiveAttacks = random(2, 4)
+      }
+    }
+  }
+
+  executeSwoopPattern () {
+    if (this.state === 'approaching') {
+      if (this.x < 0) {
+        this.x += 8
+        this.y = height * 0.3 + sin(this.x * 0.03) * 50
+      } else {
+        this.state = 'attacking'
+        this.attacking = true
+        this.updateTarget()
+      }
+    } else if (this.state === 'attacking') {
+      this.x += 9
+
+      // FIX: Adjust swoop pattern if spider is at bottom
+      if (spider.pos.y > height - 50) {
+        // Lower swoop pattern for bottom spiders
+        this.y = height * 0.7 + sin(this.x * 0.03) * 50
+      } else {
+        // Normal swoop
+        this.y = height * 0.3 + sin(this.x * 0.03) * 120
+      }
+
+      // Track toward target when close
+      if (abs(this.x - this.targetX) < 100) {
+        let dy = this.targetY - this.y
+        this.y += dy * 0.2
+      }
+
+      // Avoid going below canvas
+      this.y = min(this.y, height - 15)
+
+      // Exit screen
+      if (this.x > width + 50) {
+        this.consecutiveAttacks++
+
+        if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+          this.x = -50
+          this.state = 'approaching'
+          this.updateTarget()
+        } else {
+          this.state = 'retreating'
+          this.attacking = false
+        }
+      }
+    } else if (this.state === 'retreating') {
+      this.state = 'approaching'
+      this.attackDelay = random(90, 150)
+      this.x = -50
+      this.consecutiveAttacks = 0
+      this.maxConsecutiveAttacks = random(2, 4)
+    }
+  }
+
+  avoidObstacles () {
+    // Check collision with all obstacles
+    for (let obstacle of obstacles) {
+      let d = dist(this.x, this.y, obstacle.x, obstacle.y)
+
+      // If too close to an obstacle, push away
+      if (d < obstacle.radius + this.size + 10) {
+        // Calculate push direction (away from obstacle)
+        let pushX = (this.x - obstacle.x) / d
+        let pushY = (this.y - obstacle.y) / d
+
+        // Apply push force
+        this.x += pushX * 5
+        this.y += pushY * 5
+
+        // If stuck for too long, teleport away
+        if (this.stuckCounter === undefined) {
+          this.stuckCounter = 0
+        }
+        this.stuckCounter++
+
+        if (this.stuckCounter > 30) {
+          // Stuck for 0.5 seconds
+          // Teleport to a safe position
+          this.y = obstacle.y - obstacle.radius - 30
+          this.x = obstacle.x + random(-50, 50)
+          this.stuckCounter = 0
+
+          // If attacking, abort and retry
+          if (this.state === 'attacking') {
+            this.state = 'approaching'
+            this.attacking = false
+          }
+        }
+      } else {
+        this.stuckCounter = 0 // Reset counter when not stuck
+      }
+    }
+
+    // Also check home branch collision
+    if (window.homeBranch && this.y > window.homeBranch.y - 40) {
+      // Check if bird is in branch X range
+      let branchStart = Math.min(
+        window.homeBranch.startX,
+        window.homeBranch.endX
+      )
+      let branchEnd = Math.max(window.homeBranch.startX, window.homeBranch.endX)
+
+      if (this.x >= branchStart - 20 && this.x <= branchEnd + 20) {
+        // Bird is too close to branch, push up
+        this.y = window.homeBranch.y - 40
+
+        // If diving, abort dive
+        if (this.state === 'attacking' && this.pattern === 'dive') {
+          this.state = 'retreating'
+          this.attacking = false
+        }
+      }
+    }
+  }
+
+  executeGlidePattern () {
+    if (this.state === 'approaching') {
+      // Glide in from top corner faster
+      this.x += 5
+      this.y += 2.5
+
+      if (this.y > height * 0.15) {
+        this.state = 'attacking'
+        this.attacking = true
+        this.updateTarget()
+      }
+    } else if (this.state === 'attacking') {
+      // Glide toward target aggressively
+      let dx = this.targetX - this.x
+      let dy = this.targetY - this.y
+      let dist = sqrt(dx * dx + dy * dy)
+
+      if (dist > 10) {
+        this.x += (dx / dist) * 7 // Much faster glide
+        this.y += (dy / dist) * 7
+      }
+
+      // Pass through and maybe attack again
+      if (this.y > height - 100 || this.x < -50 || this.x > width + 50) {
+        this.consecutiveAttacks++
+
+        if (this.consecutiveAttacks < this.maxConsecutiveAttacks) {
+          // Reset for another pass
+          this.state = 'approaching'
+          this.x = random() < 0.5 ? -50 : width + 50
+          this.y = random(50, 150)
+          this.updateTarget()
+        } else {
+          this.state = 'retreating'
+          this.attacking = false
+        }
+      }
+    } else if (this.state === 'retreating') {
+      // Continue off screen
+      this.x += this.vx
+      this.y += this.vy
+
+      // Reset
+      if (this.y > height + 50 || this.x < -100 || this.x > width + 100) {
+        this.state = 'approaching'
+        this.attackDelay = random(120, 180)
+        this.x = random() < 0.5 ? -50 : width + 50
+        this.y = random(50, 150)
+        this.vx = this.x < width / 2 ? 5 : -5
+        this.vy = 2.5
+        this.consecutiveAttacks = 0
+        this.maxConsecutiveAttacks = random(2, 4)
+      }
+    }
+  }
+
+  executeCirclePattern () {
+    if (this.state === 'approaching') {
+      // Move to circle start position
+      let startX = this.circleCenter.x + cos(0) * this.circleRadius
+      let startY = this.circleCenter.y + sin(0) * this.circleRadius
+
+      let dx = startX - this.x
+      let dy = startY - this.y
+
+      this.x += dx * 0.1
+      this.y += dy * 0.1
+
+      if (abs(dx) < 20 && abs(dy) < 20) {
+        this.state = 'attacking'
+        this.attacking = true
+        this.circleAngle = 0
+      }
+    } else if (this.state === 'attacking') {
+      // Circle around center FASTER
+      this.circleAngle += 0.08 // Faster circling
+      this.x = this.circleCenter.x + cos(this.circleAngle) * this.circleRadius
+      this.y = this.circleCenter.y + sin(this.circleAngle) * this.circleRadius
+
+      // More frequent dives toward center
+      if (frameCount % 60 === 0) {
+        // Every second instead of every 2 seconds
+        this.circleRadius = max(30, this.circleRadius - 50)
+      } else {
+        this.circleRadius = min(150, this.circleRadius + 2)
+      }
+
+      // Complete circle faster
+      if (this.circleAngle > TWO_PI * 1.5) {
+        // 1.5 circles instead of 2
+        this.state = 'retreating'
+        this.attacking = false
+      }
+    } else if (this.state === 'retreating') {
+      // Fly away
+      this.y -= 7
+
+      if (this.y < -50) {
+        this.state = 'approaching'
+        this.attackDelay = random(150, 240)
+        this.x = random(width)
+      }
+    }
+  }
+
+  checkCollisions () {
+    // FIX: Increased collision radius for more generous hit detection
+    let collisionDistance = this.size + spider.radius + 5 // Added 5 pixel buffer
+
+    // Check collision with spider
+    if (
+      this.attacking &&
+      dist(this.x, this.y, spider.pos.x, spider.pos.y) < collisionDistance
+    ) {
+      // Hit spider!
+      if (gamePhase === 'DAWN') {
+        // Calculate damage
+        let damage = 20 // Base damage
+
+        // If spider has no stamina, GAME OVER!
+        if (jumpStamina <= 0) {
+          triggerGameOver('Exhausted spider caught by bird!')
+          return
+        }
+
+        // Otherwise, reduce stamina
+        jumpStamina = max(0, jumpStamina - damage)
+        stats.birdHitsTaken++
+
+        // Knockback effect
+        spider.vel.x = (spider.pos.x - this.x) * 0.3
+        spider.vel.y = -3
+        spider.isAirborne = true
+
+        // Red damage particles
+        for (let i = 0; i < 12; i++) {
+          let p = new Particle(spider.pos.x, spider.pos.y)
+          p.color = color(255, 50, 50)
+          p.vel = createVector(random(-4, 4), random(-4, 1))
+          p.size = random(4, 8)
+          particles.push(p)
+        }
+
+        // Screen shake effect
+        if (typeof screenShake !== 'undefined') {
+          screenShake = 10
+        }
+
+        // Warning notifications - but limited to prevent spam
+        if (notifications.length < 3) {
+          // Limit notifications
+          if (jumpStamina <= 20) {
+            notifications.push(
+              new Notification('CRITICAL STAMINA!', color(255, 50, 50))
+            )
+          } else if (jumpStamina <= 40) {
+            notifications.push(
+              new Notification('Low stamina - find cover!', color(255, 150, 50))
+            )
+          }
+        }
+      }
+
+      // Bird bounces off
+      this.state = 'retreating'
+      this.attacking = false
+    }
 
     // Check collision with web strands
     if (this.attacking) {
@@ -1804,6 +1939,17 @@ class Bird {
   display () {
     push()
     translate(this.x, this.y)
+
+    // Show if bird is stuck (for debugging)
+    if (this.stuckCounter > 15) {
+      // Flash red when stuck
+      push()
+      noFill()
+      stroke(255, 0, 0, 100)
+      strokeWeight(2)
+      ellipse(0, 0, this.size * 3)
+      pop()
+    }
 
     // Rotate based on movement
     if (this.state === 'attacking' && this.pattern === 'dive') {
