@@ -1242,7 +1242,6 @@ class Obstacle {
 
       pop()
     } else if (this.type === 'beetle') {
-      // Big floating beetle! (KEEP EXISTING CODE)
       push()
       rotate(this.rotation)
 
@@ -1365,7 +1364,6 @@ class Obstacle {
 
       pop()
     } else if (this.type === 'leaf') {
-      // Original leaf code (KEEP EXISTING)
       rotate(this.rotation)
 
       if (gamePhase === 'NIGHT') {
@@ -1599,10 +1597,18 @@ class Bird {
       if (abs(dx) < 50 && abs(dy) < 30) {
         this.state = 'attacking'
         this.attacking = true
+        // Initialize diveFrames and pullUpY for new attack
+        this.diveFrames = 0
+        // Calculate pullUpY: spider.pos.y + spider.radius + 8, but not below canvas
+        let candidatePullUpY = spider.pos.y + spider.radius + 8
+        this.pullUpY = Math.min(candidatePullUpY, height - 12)
         this.updateTarget()
       }
     } else if (this.state === 'attacking') {
-      // FIX: Better tracking dive that reaches bottom
+      // Track how many frames we've been attacking
+      if (typeof this.diveFrames !== 'number') this.diveFrames = 0
+      this.diveFrames++
+
       let dx = this.targetX - this.x
       let dy = this.targetY - this.y
 
@@ -1619,16 +1625,15 @@ class Bird {
         this.targetY = spider.pos.y
       }
 
-      // FIX: Extend dive range to reach bottom spiders
-      // Check if we've reached the target OR the absolute bottom
-      let reachedTarget = this.y > this.targetY - 10
+      // Only consider bailing out after a minimum number of dive frames
+      let canBailOut = this.diveFrames > 15
+      // Use pullUpY for stable bailout check
+      let reachedPullUpY = (typeof this.pullUpY === 'number') ? (this.y > this.pullUpY) : false
       let reachedBottom = this.y > height - 20 // Go almost to canvas bottom
-
-      // FIX: Also check if we're very close horizontally for bottom edge spiders
       let closeToSpider = dist(this.x, this.y, spider.pos.x, spider.pos.y) < 50
 
-      if (reachedTarget || reachedBottom || closeToSpider) {
-        // FIX: If spider is at bottom and we haven't hit it yet, do a horizontal sweep
+      if (canBailOut && (reachedPullUpY || reachedBottom || closeToSpider)) {
+        // If spider is at bottom and we haven't hit it yet, do a horizontal sweep
         if (spider.pos.y > height - 30 && !closeToSpider && !this.sweeping) {
           this.sweeping = true
           this.y = spider.pos.y // Match spider height
@@ -1643,6 +1648,8 @@ class Bird {
             this.sweeping = false
             this.state = 'retreating'
             this.attacking = false
+            this.diveFrames = 0
+            this.pullUpY = null
           }, 500) // Sweep for 0.5 seconds
         } else if (!this.sweeping) {
           // Normal attack completion
@@ -1653,11 +1660,15 @@ class Bird {
             this.state = 'approaching'
             this.attacking = false
             this.y = min(this.y, height - 50)
+            this.diveFrames = 0
+            this.pullUpY = null
             this.updateTarget()
           } else {
             // Finally retreat
             this.state = 'retreating'
             this.attacking = false
+            this.diveFrames = 0
+            this.pullUpY = null
           }
         }
       }
@@ -1668,11 +1679,15 @@ class Bird {
         if (!this.sweeping) {
           this.state = 'retreating'
           this.attacking = false
+          this.diveFrames = 0
+          this.pullUpY = null
         }
       }
     } else if (this.state === 'retreating') {
       // Clear sweep flag
       this.sweeping = false
+      this.diveFrames = 0
+      this.pullUpY = null
 
       // Fly back up
       this.vy = -this.retreatSpeed
@@ -1686,6 +1701,8 @@ class Bird {
         this.x = random(width)
         this.consecutiveAttacks = 0
         this.maxConsecutiveAttacks = random(2, 4)
+        this.diveFrames = 0
+        this.pullUpY = null
       }
     }
   }
