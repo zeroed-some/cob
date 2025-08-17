@@ -14,6 +14,7 @@ class Spider {
     this.maxSpeed = 15
     this.munchRadius = 20
     this.munchCooldown = 0
+    this.attachedObstacle = null // Track which obstacle spider is on
   }
 
   jump(targetX, targetY) {
@@ -101,8 +102,18 @@ class Spider {
   }
 
   update () {
+    // If attached to a moving obstacle, move with it
+    if (this.attachedObstacle && !this.isAirborne) {
+      // Calculate angle from obstacle center to spider
+      let angle = atan2(this.pos.y - this.attachedObstacle.y, this.pos.x - this.attachedObstacle.x)
+      // Keep spider on the surface of the obstacle
+      this.pos.x = this.attachedObstacle.x + cos(angle) * (this.attachedObstacle.radius + this.radius)
+      this.pos.y = this.attachedObstacle.y + sin(angle) * (this.attachedObstacle.radius + this.radius)
+    }
+    
     if (this.isAirborne) {
       this.acc.add(this.gravity)
+      this.attachedObstacle = null // Clear attachment when jumping
     }
 
     this.vel.add(this.acc)
@@ -121,6 +132,7 @@ class Spider {
     if (this.pos.y >= height - this.radius) {
       this.pos.y = height - this.radius
       this.land()
+      this.attachedObstacle = null
     }
 
     // Check wall collisions
@@ -180,6 +192,7 @@ class Spider {
           // Place spider on the branch surface
           this.pos.y = branchSurfaceY - this.radius
           this.land()
+          this.attachedObstacle = null
         }
       }
     }
@@ -242,6 +255,7 @@ class Spider {
     let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
     this.pos.x = obstacle.x + cos(angle) * (obstacle.radius + this.radius)
     this.pos.y = obstacle.y + sin(angle) * (obstacle.radius + this.radius)
+    this.attachedObstacle = obstacle // Track which obstacle we're on
     this.land()
   }
 
@@ -258,6 +272,7 @@ class Spider {
       p5.Vector.mult(line, projLength)
     )
     this.pos = closestPoint
+    this.attachedObstacle = null // Not on an obstacle
     this.land()
   }
 
@@ -822,7 +837,7 @@ class Obstacle {
       pop()
       
     } else if (this.type === 'beetle') {
-      // Big beetle!
+      // Big floating beetle!
       push()
       rotate(this.rotation)
       
@@ -831,18 +846,49 @@ class Obstacle {
       fill(0, 0, 0, 40)
       ellipse(3, 3, this.radius * 1.8, this.radius * 2.2)
       
-      // Wings (if flying at night)
-      if (gamePhase === 'NIGHT') {
-        push()
-        fill(255, 255, 255, 100 + sin(this.wingPhase) * 50)
-        noStroke()
-        let wingSpread = sin(this.wingPhase) * 15
-        ellipse(-wingSpread, 0, 20, 12)
-        ellipse(wingSpread, 0, 20, 12)
-        pop()
-      }
+      // Wings - always visible and flapping since they're floating
+      push()
+      // Wing flap animation
+      let wingAngle = sin(this.wingPhase) * 0.3
+      let wingSpread = 15 + sin(this.wingPhase) * 10
       
-      // Main beetle body
+      // Left wing
+      push()
+      translate(-this.radius * 0.4, 0)
+      rotate(-wingAngle)
+      fill(255, 255, 255, 120)
+      stroke(0, 0, 0, 100)
+      strokeWeight(0.5)
+      ellipse(-wingSpread * 0.7, 0, wingSpread * 1.2, 15)
+      // Wing details
+      noStroke()
+      fill(200, 200, 200, 80)
+      ellipse(-wingSpread * 0.6, 0, wingSpread * 0.8, 10)
+      pop()
+      
+      // Right wing
+      push()
+      translate(this.radius * 0.4, 0)
+      rotate(wingAngle)
+      fill(255, 255, 255, 120)
+      stroke(0, 0, 0, 100)
+      strokeWeight(0.5)
+      ellipse(wingSpread * 0.7, 0, wingSpread * 1.2, 15)
+      // Wing details
+      noStroke()
+      fill(200, 200, 200, 80)
+      ellipse(wingSpread * 0.6, 0, wingSpread * 0.8, 10)
+      pop()
+      
+      // Extra glow at night
+      if (gamePhase === 'NIGHT') {
+        noStroke()
+        fill(255, 255, 200, 30 + sin(this.wingPhase * 2) * 20)
+        ellipse(0, 0, this.radius * 3, this.radius * 2)
+      }
+      pop()
+      
+      // Main beetle body (on top of wings)
       fill(red(this.beetleColor), green(this.beetleColor), blue(this.beetleColor))
       stroke(0)
       strokeWeight(2)
@@ -865,26 +911,30 @@ class Obstacle {
       ellipse(this.radius * 0.2, this.radius * 0.4, this.radius * 0.35)
       ellipse(-this.radius * 0.25, this.radius * 0.3, this.radius * 0.25)
       
-      // Legs
+      // No legs - they're flying!
+      // Just small leg stubs tucked under the body
       stroke(0)
-      strokeWeight(2)
-      for (let i = 0; i < 3; i++) {
-        let legY = -this.radius * 0.3 + i * this.radius * 0.3
-        let legMove = sin(this.wingPhase * 2 + i) * 2
-        line(-this.radius * 0.8, legY, -this.radius * 1.2 + legMove, legY + 5)
-        line(this.radius * 0.8, legY, this.radius * 1.2 - legMove, legY + 5)
-      }
+      strokeWeight(1)
+      // Tiny tucked legs
+      line(-this.radius * 0.5, -this.radius * 0.2, -this.radius * 0.6, -this.radius * 0.1)
+      line(this.radius * 0.5, -this.radius * 0.2, this.radius * 0.6, -this.radius * 0.1)
+      line(-this.radius * 0.5, this.radius * 0.2, -this.radius * 0.6, this.radius * 0.1)
+      line(this.radius * 0.5, this.radius * 0.2, this.radius * 0.6, this.radius * 0.1)
       
       // Antennae
       strokeWeight(1)
       line(-3, -this.radius * 1.1, -8, -this.radius * 1.4)
       line(3, -this.radius * 1.1, 8, -this.radius * 1.4)
       
-      // Eyes
+      // Eyes (bigger and more prominent)
       fill(255, 0, 0)
       noStroke()
-      ellipse(-5, -this.radius * 0.7, 4)
-      ellipse(5, -this.radius * 0.7, 4)
+      ellipse(-5, -this.radius * 0.7, 5)
+      ellipse(5, -this.radius * 0.7, 5)
+      // Eye shine
+      fill(255, 150, 150)
+      ellipse(-4, -this.radius * 0.72, 2)
+      ellipse(6, -this.radius * 0.72, 2)
       
       pop()
       

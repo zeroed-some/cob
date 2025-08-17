@@ -117,25 +117,25 @@ function setup() {
         obstacles.push(new Obstacle(x, y, 20, 'leaf')); // Use leaf as invisible anchor
     }
     
-    // Create fewer, bigger, quirkier obstacles
-    let numObstacles = Math.floor((width * height) / 120000); // Much fewer
-    numObstacles = constrain(numObstacles, 8, 15);
+    // Create more obstacles for denser coverage
+    let numObstacles = Math.floor((width * height) / 60000); // More obstacles
+    numObstacles = constrain(numObstacles, 15, 25);
     
-    // Create ant balloons (2-3)
-    let numBalloons = Math.floor(random(2, 4));
+    // Create ant balloons (4-6)
+    let numBalloons = Math.floor(random(4, 7));
     for (let i = 0; i < numBalloons; i++) {
         let attempts = 0;
         let placed = false;
         
         while (!placed && attempts < 30) {
-            let x = random(120, width - 120);
-            let y = random(80, height * 0.5); // Balloons float in upper half
-            let radius = random(40, 55); // Bigger
+            let x = random(80, width - 80);
+            let y = random(60, height * 0.55); // Balloons float in upper half
+            let radius = random(35, 45); // Good size for hopping
             
             let valid = true;
             // Check distance from other obstacles
             for (let obstacle of obstacles) {
-                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 80) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 50) {
                     valid = false;
                     break;
                 }
@@ -144,7 +144,7 @@ function setup() {
             // Check distance from home branch
             if (valid && window.homeBranch) {
                 let branchY = window.homeBranch.y;
-                if (Math.abs(y - branchY) < radius + 50) {
+                if (Math.abs(y - branchY) < radius + 35) {
                     valid = false;
                 }
             }
@@ -157,20 +157,20 @@ function setup() {
         }
     }
     
-    // Create beetles (2-3)
-    let numBeetles = Math.floor(random(2, 4));
+    // Create beetles (3-5)
+    let numBeetles = Math.floor(random(3, 6));
     for (let i = 0; i < numBeetles; i++) {
         let attempts = 0;
         let placed = false;
         
         while (!placed && attempts < 30) {
-            let x = random(100, width - 100);
-            let y = random(height * 0.3, height * 0.7); // Middle areas
-            let radius = random(35, 50);
+            let x = random(70, width - 70);
+            let y = random(height * 0.2, height * 0.8); // Spread throughout middle/lower
+            let radius = random(30, 40);
             
             let valid = true;
             for (let obstacle of obstacles) {
-                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 70) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 45) {
                     valid = false;
                     break;
                 }
@@ -179,7 +179,7 @@ function setup() {
             // Check distance from home branch
             if (valid && window.homeBranch) {
                 let branchY = window.homeBranch.y;
-                if (Math.abs(y - branchY) < radius + 40) {
+                if (Math.abs(y - branchY) < radius + 30) {
                     valid = false;
                 }
             }
@@ -192,20 +192,23 @@ function setup() {
         }
     }
     
-    // Create leaves (3-4) for more stable anchor points
-    let numLeaves = Math.floor(random(3, 5));
+    // Create LOTS of leaves (8-12) for excellent hopping coverage
+    let numLeaves = Math.floor(random(8, 13));
     for (let i = 0; i < numLeaves; i++) {
         let attempts = 0;
         let placed = false;
         
         while (!placed && attempts < 30) {
-            let x = random(80, width - 80);
-            let y = random(100, height - 150);
-            let radius = random(30, 40);
+            // Distribute leaves more evenly across the screen
+            let gridX = (i % 4) * (width / 4) + random(50, width/4 - 50);
+            let gridY = Math.floor(i / 4) * (height / 3) + random(50, height/3 - 50);
+            let x = constrain(gridX, 50, width - 50);
+            let y = constrain(gridY, 60, height - 100);
+            let radius = random(20, 30);
             
             let valid = true;
             for (let obstacle of obstacles) {
-                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 60) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 35) {
                     valid = false;
                     break;
                 }
@@ -219,15 +222,41 @@ function setup() {
         }
     }
     
-    // Add guaranteed edge anchor points (smaller, stable leaves)
-    obstacles.push(new Obstacle(50, height/2, 25, 'leaf'));
-    obstacles.push(new Obstacle(width - 50, height/2, 25, 'leaf'));
-    obstacles.push(new Obstacle(width/2, 60, 25, 'leaf'));
+    // Add even more guaranteed coverage points (smaller leaves)
+    // Corners
+    obstacles.push(new Obstacle(50, 80, 18, 'leaf'));
+    obstacles.push(new Obstacle(width - 50, 80, 18, 'leaf'));
+    obstacles.push(new Obstacle(50, height - 100, 18, 'leaf'));
+    obstacles.push(new Obstacle(width - 50, height - 100, 18, 'leaf'));
     
-    // Bottom anchors for better coverage
-    if (width > 1000) {
-        obstacles.push(new Obstacle(width/3, height - 130, 25, 'leaf'));
-        obstacles.push(new Obstacle(2*width/3, height - 130, 25, 'leaf'));
+    // Edge midpoints
+    obstacles.push(new Obstacle(35, height/3, 18, 'leaf'));
+    obstacles.push(new Obstacle(35, 2*height/3, 18, 'leaf'));
+    obstacles.push(new Obstacle(width - 35, height/3, 18, 'leaf'));
+    obstacles.push(new Obstacle(width - 35, 2*height/3, 18, 'leaf'));
+    obstacles.push(new Obstacle(width/3, 45, 18, 'leaf'));
+    obstacles.push(new Obstacle(2*width/3, 45, 18, 'leaf'));
+    obstacles.push(new Obstacle(width/3, height - 90, 18, 'leaf'));
+    obstacles.push(new Obstacle(2*width/3, height - 90, 18, 'leaf'));
+    
+    // Fill any remaining gaps for smooth hopping
+    if (width > 600) {
+        // Create a grid of small leaves to ensure no dead zones
+        for (let x = width/5; x < width; x += width/5) {
+            for (let y = height/4; y < height - 100; y += height/4) {
+                // Check if there's already an obstacle nearby
+                let needsLeaf = true;
+                for (let obstacle of obstacles) {
+                    if (dist(x, y, obstacle.x, obstacle.y) < 80) {
+                        needsLeaf = false;
+                        break;
+                    }
+                }
+                if (needsLeaf) {
+                    obstacles.push(new Obstacle(x + random(-20, 20), y + random(-20, 20), 15, 'leaf'));
+                }
+            }
+        }
     }
     
     // Spawn initial food boxes
