@@ -1277,6 +1277,431 @@ class FoodBox {
   }
 }
 
+class Bird {
+    constructor(pattern, isThief = false) {
+        this.pattern = pattern; // 'dive', 'swoop', 'glide', 'circle'
+        this.isThief = isThief;
+        this.active = false;
+        this.attacking = false;
+        this.attackDelay = 120; // Frames before first attack
+        
+        // Position and movement
+        this.x = random(width);
+        this.y = -50; // Start above screen
+        this.vx = 0;
+        this.vy = 0;
+        this.targetX = 0;
+        this.targetY = 0;
+        this.speed = 3;
+        this.angle = 0;
+        this.wingPhase = random(TWO_PI);
+        
+        // Visual properties
+        this.size = isThief ? 25 : 20;
+        this.color = isThief ? color(100, 50, 150) : color(50, 50, 50);
+        
+        // Pattern-specific properties
+        if (pattern === 'circle') {
+            this.circleRadius = 150;
+            this.circleAngle = 0;
+            this.circleCenter = createVector(width/2, height/2);
+        }
+        
+        // Attack properties
+        this.diveSpeed = 8;
+        this.retreatSpeed = 4;
+        this.state = 'waiting'; // 'waiting', 'approaching', 'attacking', 'retreating'
+    }
+    
+    update() {
+        // Update wing animation
+        this.wingPhase += 0.2;
+        
+        // Countdown to attack
+        if (this.attackDelay > 0) {
+            this.attackDelay--;
+            // Hover while waiting
+            this.y = -30 + sin(frameCount * 0.05) * 10;
+            this.x += sin(frameCount * 0.03) * 2;
+            return;
+        }
+        
+        // Activate after delay
+        if (!this.active) {
+            this.active = true;
+            this.state = 'approaching';
+            // Set initial target
+            if (this.isThief) {
+                // Target caught flies
+                let caughtFlies = flies.filter(f => f.stuck || f.caught);
+                if (caughtFlies.length > 0) {
+                    let target = random(caughtFlies);
+                    this.targetX = target.pos.x;
+                    this.targetY = target.pos.y;
+                } else {
+                    this.active = false; // No targets, deactivate
+                    return;
+                }
+            } else {
+                // Target spider or web strands
+                if (random() < 0.7) {
+                    // Target spider
+                    this.targetX = spider.pos.x;
+                    this.targetY = spider.pos.y;
+                } else {
+                    // Target a web strand
+                    if (webStrands.length > 0) {
+                        let strand = random(webStrands.filter(s => !s.broken));
+                        if (strand && strand.path && strand.path.length > 0) {
+                            let point = random(strand.path);
+                            this.targetX = point.x;
+                            this.targetY = point.y;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Execute movement pattern
+        switch(this.pattern) {
+            case 'dive':
+                this.executeDivePattern();
+                break;
+            case 'swoop':
+                this.executeSwoopPattern();
+                break;
+            case 'glide':
+                this.executeGlidePattern();
+                break;
+            case 'circle':
+                this.executeCirclePattern();
+                break;
+        }
+        
+        // Check collisions
+        this.checkCollisions();
+        
+        // Keep on screen during approach
+        if (this.state === 'approaching') {
+            this.x = constrain(this.x, 20, width - 20);
+        }
+    }
+    
+    executeDivePattern() {
+        if (this.state === 'approaching') {
+            // Move into position above target
+            let dx = this.targetX - this.x;
+            let dy = 100 - this.y; // Position above screen
+            
+            this.x += dx * 0.05;
+            this.y += dy * 0.05;
+            
+            // When in position, start diving
+            if (abs(dx) < 30 && abs(dy) < 20) {
+                this.state = 'attacking';
+                this.attacking = true;
+            }
+        } else if (this.state === 'attacking') {
+            // Dive straight down
+            this.vy = this.diveSpeed;
+            this.y += this.vy;
+            
+            // Hit ground or target
+            if (this.y > height - 50) {
+                this.state = 'retreating';
+                this.attacking = false;
+            }
+        } else if (this.state === 'retreating') {
+            // Fly back up
+            this.vy = -this.retreatSpeed;
+            this.y += this.vy;
+            
+            // Reset when off screen
+            if (this.y < -50) {
+                this.state = 'approaching';
+                this.attackDelay = random(180, 300);
+                this.x = random(width);
+            }
+        }
+    }
+    
+    executeSwoopPattern() {
+        if (this.state === 'approaching') {
+            // Come from the side
+            if (this.x < 0) {
+                this.x += 5;
+                this.y = height * 0.3 + sin(this.x * 0.02) * 50;
+            } else {
+                this.state = 'attacking';
+                this.attacking = true;
+            }
+        } else if (this.state === 'attacking') {
+            // Swoop across screen following sine wave
+            this.x += 6;
+            this.y = height * 0.3 + sin(this.x * 0.02) * 100;
+            
+            // Check if passed target
+            if (abs(this.x - this.targetX) < 50) {
+                // Attempt to grab/hit
+                let swoopY = height * 0.3 + sin(this.targetX * 0.02) * 100;
+                this.y = lerp(this.y, swoopY, 0.3);
+            }
+            
+            // Exit screen
+            if (this.x > width + 50) {
+                this.state = 'retreating';
+                this.attacking = false;
+            }
+        } else if (this.state === 'retreating') {
+            // Reset
+            this.state = 'approaching';
+            this.attackDelay = random(240, 360);
+            this.x = -50;
+        }
+    }
+    
+    executeGlidePattern() {
+        if (this.state === 'approaching') {
+            // Glide in from top corner
+            this.x += 3;
+            this.y += 1.5;
+            
+            if (this.y > height * 0.2) {
+                this.state = 'attacking';
+                this.attacking = true;
+            }
+        } else if (this.state === 'attacking') {
+            // Glide toward target
+            let dx = this.targetX - this.x;
+            let dy = this.targetY - this.y;
+            let dist = sqrt(dx * dx + dy * dy);
+            
+            if (dist > 10) {
+                this.x += (dx / dist) * 4;
+                this.y += (dy / dist) * 4;
+            }
+            
+            // Pass through and continue
+            if (this.y > height - 100 || this.x < -50 || this.x > width + 50) {
+                this.state = 'retreating';
+                this.attacking = false;
+            }
+        } else if (this.state === 'retreating') {
+            // Continue off screen
+            this.x += this.vx;
+            this.y += this.vy;
+            
+            // Reset
+            if (this.y > height + 50 || this.x < -100 || this.x > width + 100) {
+                this.state = 'approaching';
+                this.attackDelay = random(300, 420);
+                this.x = random() < 0.5 ? -50 : width + 50;
+                this.y = random(50, 150);
+                this.vx = this.x < width/2 ? 3 : -3;
+                this.vy = 1.5;
+            }
+        }
+    }
+    
+    executeCirclePattern() {
+        if (this.state === 'approaching') {
+            // Move to circle start position
+            let startX = this.circleCenter.x + cos(0) * this.circleRadius;
+            let startY = this.circleCenter.y + sin(0) * this.circleRadius;
+            
+            let dx = startX - this.x;
+            let dy = startY - this.y;
+            
+            this.x += dx * 0.05;
+            this.y += dy * 0.05;
+            
+            if (abs(dx) < 20 && abs(dy) < 20) {
+                this.state = 'attacking';
+                this.attacking = true;
+                this.circleAngle = 0;
+            }
+        } else if (this.state === 'attacking') {
+            // Circle around center
+            this.circleAngle += 0.05;
+            this.x = this.circleCenter.x + cos(this.circleAngle) * this.circleRadius;
+            this.y = this.circleCenter.y + sin(this.circleAngle) * this.circleRadius;
+            
+            // Occasionally dive toward center
+            if (frameCount % 120 === 0) {
+                this.circleRadius = max(50, this.circleRadius - 30);
+            } else {
+                this.circleRadius = min(150, this.circleRadius + 1);
+            }
+            
+            // Complete circle
+            if (this.circleAngle > TWO_PI * 2) {
+                this.state = 'retreating';
+                this.attacking = false;
+            }
+        } else if (this.state === 'retreating') {
+            // Fly away
+            this.y -= 5;
+            
+            if (this.y < -50) {
+                this.state = 'approaching';
+                this.attackDelay = random(300, 480);
+                this.x = random(width);
+            }
+        }
+    }
+    
+    checkCollisions() {
+        // Check collision with spider
+        if (this.attacking && dist(this.x, this.y, spider.pos.x, spider.pos.y) < this.size + spider.radius) {
+            // Hit spider!
+            if (gamePhase === 'DAWN') {
+                // During dawn, hitting spider costs stamina
+                jumpStamina = max(0, jumpStamina - 15);
+                stats.birdHitsTaken++;
+                
+                // Knockback
+                spider.vel.x = (spider.pos.x - this.x) * 0.3;
+                spider.vel.y = -3;
+                
+                // Particles
+                for (let i = 0; i < 8; i++) {
+                    let p = new Particle(spider.pos.x, spider.pos.y);
+                    p.color = color(255, 100, 100);
+                    p.vel = createVector(random(-3, 3), random(-3, 1));
+                    particles.push(p);
+                }
+            }
+            
+            // Bird bounces off
+            this.state = 'retreating';
+            this.attacking = false;
+        }
+        
+        // Check collision with web strands
+        if (this.attacking) {
+            for (let strand of webStrands) {
+                if (!strand.broken && strand.path) {
+                    for (let point of strand.path) {
+                        if (dist(this.x, this.y, point.x, point.y) < this.size) {
+                            // Bird breaks the strand!
+                            strand.broken = true;
+                            stats.strandsLostInNight++;
+                            
+                            // Particles
+                            for (let i = 0; i < 5; i++) {
+                                let p = new Particle(point.x, point.y);
+                                p.color = color(255, 255, 255);
+                                p.vel = createVector(random(-2, 2), random(-2, 2));
+                                particles.push(p);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Thief bird steals flies
+        if (this.isThief && this.attacking) {
+            for (let i = flies.length - 1; i >= 0; i--) {
+                let fly = flies[i];
+                if ((fly.stuck || fly.caught) && dist(this.x, this.y, fly.pos.x, fly.pos.y) < this.size + 10) {
+                    // Steal the fly!
+                    flies.splice(i, 1);
+                    
+                    // Purple particles for theft
+                    for (let j = 0; j < 6; j++) {
+                        let p = new Particle(fly.pos.x, fly.pos.y);
+                        p.color = color(200, 100, 255);
+                        p.vel = createVector(random(-2, 2), random(-2, 2));
+                        particles.push(p);
+                    }
+                    
+                    // Thief escapes after stealing
+                    this.state = 'retreating';
+                    this.attacking = false;
+                    this.active = false; // Deactivate thief after successful theft
+                    break;
+                }
+            }
+        }
+    }
+    
+    display() {
+        push();
+        translate(this.x, this.y);
+        
+        // Rotate based on movement
+        if (this.state === 'attacking' && this.pattern === 'dive') {
+            rotate(PI/2); // Point down when diving
+        } else if (this.vx !== 0) {
+            rotate(atan2(this.vy, this.vx));
+        }
+        
+        // Shadow
+        push();
+        noStroke();
+        fill(0, 0, 0, 30);
+        ellipse(5, 5, this.size * 2);
+        pop();
+        
+        // Wings
+        let wingSpread = sin(this.wingPhase) * this.size * 0.8;
+        
+        // Wing shadows
+        noStroke();
+        fill(0, 0, 0, 40);
+        ellipse(-wingSpread + 2, 2, this.size * 1.5, this.size * 0.5);
+        ellipse(wingSpread + 2, 2, this.size * 1.5, this.size * 0.5);
+        
+        // Wings
+        fill(this.isThief ? color(120, 70, 180) : color(80, 80, 80));
+        ellipse(-wingSpread, 0, this.size * 1.5, this.size * 0.5);
+        ellipse(wingSpread, 0, this.size * 1.5, this.size * 0.5);
+        
+        // Body
+        fill(this.isThief ? color(100, 50, 150) : color(50, 50, 50));
+        ellipse(0, 0, this.size * 0.8, this.size);
+        
+        // Head
+        fill(this.isThief ? color(80, 40, 120) : color(30, 30, 30));
+        ellipse(0, -this.size * 0.4, this.size * 0.5);
+        
+        // Eye
+        fill(this.isThief ? color(255, 100, 255) : color(255, 100, 100));
+        noStroke();
+        ellipse(3, -this.size * 0.4, 4);
+        
+        // Beak
+        fill(this.isThief ? color(200, 150, 50) : color(200, 150, 0));
+        triangle(
+            this.size * 0.25, -this.size * 0.4,
+            this.size * 0.45, -this.size * 0.35,
+            this.size * 0.25, -this.size * 0.3
+        );
+        
+        // Tail feathers
+        fill(this.isThief ? color(120, 70, 180) : color(80, 80, 80));
+        for (let i = -1; i <= 1; i++) {
+            push();
+            translate(-this.size * 0.3, this.size * 0.3);
+            rotate(i * 0.2);
+            ellipse(0, 0, this.size * 0.3, this.size * 0.8);
+            pop();
+        }
+        
+        // Warning indicator if attacking
+        if (this.attacking && frameCount % 20 < 10) {
+            noFill();
+            stroke(255, 100, 100, 150);
+            strokeWeight(2);
+            ellipse(0, 0, this.size * 2.5);
+        }
+        
+        pop();
+    }
+}
+
 class Particle {
   constructor(x, y) {
     this.pos = createVector(x, y);
