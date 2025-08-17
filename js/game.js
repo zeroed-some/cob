@@ -114,77 +114,120 @@ function setup() {
             homeBranchLength * t : 
             width - homeBranchLength * t;
         let y = homeBranchY + sin(t * PI) * 10; // Slight curve
-        obstacles.push(new Obstacle(x, y, 20, 'branch'));
+        obstacles.push(new Obstacle(x, y, 20, 'leaf')); // Use leaf as invisible anchor
     }
     
-    // Create obstacles with better distribution
-    let numObstacles = Math.floor((width * height) / 60000);
-    numObstacles = constrain(numObstacles, 10, 25);
+    // Create fewer, bigger, quirkier obstacles
+    let numObstacles = Math.floor((width * height) / 120000); // Much fewer
+    numObstacles = constrain(numObstacles, 8, 15);
     
-    // Divide screen into zones for better distribution
-    let zones = [
-        { minY: 50, maxY: height * 0.3 },        // Top zone
-        { minY: height * 0.3, maxY: height * 0.6 }, // Middle zone
-        { minY: height * 0.6, maxY: height - 100 }  // Bottom zone
-    ];
-    
-    let obstaclesPerZone = Math.ceil(numObstacles / 3);
-    
-    for (let zone of zones) {
-        for (let i = 0; i < obstaclesPerZone; i++) {
-            let attempts = 0;
-            let placed = false;
+    // Create ant balloons (2-3)
+    let numBalloons = Math.floor(random(2, 4));
+    for (let i = 0; i < numBalloons; i++) {
+        let attempts = 0;
+        let placed = false;
+        
+        while (!placed && attempts < 30) {
+            let x = random(120, width - 120);
+            let y = random(80, height * 0.5); // Balloons float in upper half
+            let radius = random(40, 55); // Bigger
             
-            while (!placed && attempts < 20) {
-                let x = random(80, width - 80);
-                let y = random(zone.minY, zone.maxY);
-                let radius = random(25, 45);
-                let type = random() < 0.6 ? 'branch' : 'leaf';
-                
-                let valid = true;
-                for (let obstacle of obstacles) {
-                    if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 40) {
-                        valid = false;
-                        break;
-                    }
+            let valid = true;
+            // Check distance from other obstacles
+            for (let obstacle of obstacles) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 80) {
+                    valid = false;
+                    break;
                 }
-                // Avoid overlapping the home branch body (transform point into branch frame)
-                if (valid) {
-                    const ca = Math.cos(window.homeBranch.angle);
-                    const sa = Math.sin(window.homeBranch.angle);
-                    const relY = y - window.homeBranch.y; // translate to branch's local origin
-                    const xr = x * ca + relY * sa;        // rotate into branch frame
-                    const yr = -x * sa + relY * ca;
-                    const minX = Math.min(window.homeBranch.startX, window.homeBranch.endX) - radius - 8;
-                    const maxX = Math.max(window.homeBranch.startX, window.homeBranch.endX) + radius + 8;
-                    const halfThickness = window.homeBranch.thickness + radius + 6;
-                    if (xr >= minX && xr <= maxX && Math.abs(yr) <= halfThickness) {
-                        valid = false; // too close to the branch hull
-                    }
-                }
-                
-                if (valid) {
-                    obstacles.push(new Obstacle(x, y, radius, type));
-                    placed = true;
-                }
-                attempts++;
             }
+            
+            // Check distance from home branch
+            if (valid && window.homeBranch) {
+                let branchY = window.homeBranch.y;
+                if (Math.abs(y - branchY) < radius + 50) {
+                    valid = false;
+                }
+            }
+            
+            if (valid) {
+                obstacles.push(new Obstacle(x, y, radius, 'balloon'));
+                placed = true;
+            }
+            attempts++;
         }
     }
     
-    // Add guaranteed anchor points with better bottom coverage
-    obstacles.push(new Obstacle(50, height/2, 35, 'branch'));
-    obstacles.push(new Obstacle(width - 50, height/2, 35, 'branch'));
-    obstacles.push(new Obstacle(width/2, 50, 40, 'leaf'));
+    // Create beetles (2-3)
+    let numBeetles = Math.floor(random(2, 4));
+    for (let i = 0; i < numBeetles; i++) {
+        let attempts = 0;
+        let placed = false;
+        
+        while (!placed && attempts < 30) {
+            let x = random(100, width - 100);
+            let y = random(height * 0.3, height * 0.7); // Middle areas
+            let radius = random(35, 50);
+            
+            let valid = true;
+            for (let obstacle of obstacles) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 70) {
+                    valid = false;
+                    break;
+                }
+            }
+            
+            // Check distance from home branch
+            if (valid && window.homeBranch) {
+                let branchY = window.homeBranch.y;
+                if (Math.abs(y - branchY) < radius + 40) {
+                    valid = false;
+                }
+            }
+            
+            if (valid) {
+                obstacles.push(new Obstacle(x, y, radius, 'beetle'));
+                placed = true;
+            }
+            attempts++;
+        }
+    }
     
-    // More bottom anchors for reachability
-    obstacles.push(new Obstacle(width/4, height - 120, 35, 'leaf'));
-    obstacles.push(new Obstacle(3*width/4, height - 120, 35, 'branch'));
-    obstacles.push(new Obstacle(width/2, height - 150, 30, 'branch'));
+    // Create leaves (3-4) for more stable anchor points
+    let numLeaves = Math.floor(random(3, 5));
+    for (let i = 0; i < numLeaves; i++) {
+        let attempts = 0;
+        let placed = false;
+        
+        while (!placed && attempts < 30) {
+            let x = random(80, width - 80);
+            let y = random(100, height - 150);
+            let radius = random(30, 40);
+            
+            let valid = true;
+            for (let obstacle of obstacles) {
+                if (dist(x, y, obstacle.x, obstacle.y) < radius + obstacle.radius + 60) {
+                    valid = false;
+                    break;
+                }
+            }
+            
+            if (valid) {
+                obstacles.push(new Obstacle(x, y, radius, 'leaf'));
+                placed = true;
+            }
+            attempts++;
+        }
+    }
     
-    if (width > 1200) {
-        obstacles.push(new Obstacle(width/3, height/3, 35, 'leaf'));
-        obstacles.push(new Obstacle(2*width/3, height/3, 35, 'branch'));
+    // Add guaranteed edge anchor points (smaller, stable leaves)
+    obstacles.push(new Obstacle(50, height/2, 25, 'leaf'));
+    obstacles.push(new Obstacle(width - 50, height/2, 25, 'leaf'));
+    obstacles.push(new Obstacle(width/2, 60, 25, 'leaf'));
+    
+    // Bottom anchors for better coverage
+    if (width > 1000) {
+        obstacles.push(new Obstacle(width/3, height - 130, 25, 'leaf'));
+        obstacles.push(new Obstacle(2*width/3, height - 130, 25, 'leaf'));
     }
     
     // Spawn initial food boxes
@@ -224,8 +267,9 @@ function draw() {
         drawMoon();
     }
     
-    // Display game objects
+    // Update and display game objects
     for (let obstacle of obstacles) {
+        obstacle.update(); // Update movement and animations
         obstacle.display();
     }
     

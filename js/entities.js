@@ -16,64 +16,64 @@ class Spider {
     this.munchCooldown = 0
   }
 
-jump(targetX, targetY) {
-        if (!this.canJump) return;
+  jump(targetX, targetY) {
+    if (!this.canJump) return;
+    
+    let direction = createVector(targetX - this.pos.x, targetY - this.pos.y);
+    let clickDistance = direction.mag();
+    direction.normalize();
+    
+    // Scale jump power based on click distance (closer clicks = smaller jumps)
+    let actualJumpPower = map(clickDistance, 0, 200, 3, this.jumpPower);
+    actualJumpPower = constrain(actualJumpPower, 3, this.jumpPower);
+    direction.mult(actualJumpPower);
+    
+    this.vel = direction;
+    this.isAirborne = true;
+    this.canJump = false;
+    this.lastAnchorPoint = this.pos.copy();
+    
+    // Check if we're jumping off a web strand
+    for (let strand of webStrands) {
+      if (strand === currentStrand) continue;
+      
+      if (this.checkStrandCollision(strand)) {
+        // Much simpler shimmy detection based on actual jump power used
+        let isShimmy = actualJumpPower < 6; // If we used less than half power, it's a shimmy
         
-        let direction = createVector(targetX - this.pos.x, targetY - this.pos.y);
-        let clickDistance = direction.mag();
-        direction.normalize();
-        
-        // Scale jump power based on click distance (closer clicks = smaller jumps)
-        let actualJumpPower = map(clickDistance, 0, 200, 3, this.jumpPower);
-        actualJumpPower = constrain(actualJumpPower, 3, this.jumpPower);
-        direction.mult(actualJumpPower);
-        
-        this.vel = direction;
-        this.isAirborne = true;
-        this.canJump = false;
-        this.lastAnchorPoint = this.pos.copy();
-        
-        // Check if we're jumping off a web strand
-        for (let strand of webStrands) {
-            if (strand === currentStrand) continue;
-            
-            if (this.checkStrandCollision(strand)) {
-                // Much simpler shimmy detection based on actual jump power used
-                let isShimmy = actualJumpPower < 6; // If we used less than half power, it's a shimmy
-                
-                // Apply appropriate recoil based on movement type
-                if (isShimmy) {
-                    // Trigger shimmy visual effect
-                    this.shimmyEffect = 20;
-                    
-                    // NO recoil at all for shimmying - just tiny vibration
-                    strand.vibrate(0.3);
-                    
-                    // Tiny yellow particles
-                    let p = new Particle(this.pos.x, this.pos.y);
-                    p.color = color(255, 255, 100, 80);
-                    p.vel = createVector(random(-0.3, 0.3), random(-0.3, 0.3));
-                    p.size = 2;
-                    particles.push(p);
-                } else {
-                    // Scale recoil based on actual jump power
-                    let recoilForce = -(actualJumpPower / this.jumpPower) * 0.08; // Scale by power ratio
-                    strand.applyRecoil(recoilForce);
-                    
-                    // Create particles only for real jumps
-                    for (let i = 0; i < 2; i++) {
-                        let p = new Particle(this.pos.x, this.pos.y);
-                        p.color = color(255, 255, 255, 120);
-                        p.vel = createVector(random(-0.8, 0.8), random(1, 2));
-                        p.size = 3;
-                        particles.push(p);
-                    }
-                }
-                
-                break;
-            }
+        // Apply appropriate recoil based on movement type
+        if (isShimmy) {
+          // Trigger shimmy visual effect
+          this.shimmyEffect = 20;
+          
+          // NO recoil at all for shimmying - just tiny vibration
+          strand.vibrate(0.3);
+          
+          // Tiny yellow particles
+          let p = new Particle(this.pos.x, this.pos.y);
+          p.color = color(255, 255, 100, 80);
+          p.vel = createVector(random(-0.3, 0.3), random(-0.3, 0.3));
+          p.size = 2;
+          particles.push(p);
+        } else {
+          // Scale recoil based on actual jump power
+          let recoilForce = -(actualJumpPower / this.jumpPower) * 0.08; // Scale by power ratio
+          strand.applyRecoil(recoilForce);
+          
+          // Create particles only for real jumps
+          for (let i = 0; i < 2; i++) {
+            let p = new Particle(this.pos.x, this.pos.y);
+            p.color = color(255, 255, 255, 120);
+            p.vel = createVector(random(-0.8, 0.8), random(1, 2));
+            p.size = 3;
+            particles.push(p);
+          }
         }
+        
+        break;
+      }
     }
+  }
     
   munch () {
     if (this.munchCooldown > 0) return
@@ -559,14 +559,46 @@ class Fly {
 
 class Obstacle {
   constructor (x, y, radius, type) {
+    // Store original position for drift tracking
+    this.originalX = x
+    this.originalY = y
     this.x = x
     this.y = y
     this.radius = radius
-    this.type = type || (random() < 0.5 ? 'branch' : 'leaf')
+    this.type = type || 'leaf'
     this.rotation = random(TWO_PI)
     this.leafPoints = []
-
-    if (this.type === 'leaf') {
+    
+    // Movement properties for all types
+    this.bobOffset = random(TWO_PI)
+    this.bobSpeed = random(0.02, 0.04)
+    this.bobAmount = 0
+    
+    // Type-specific initialization
+    if (this.type === 'balloon') {
+      this.bobAmount = 8 // Balloons bob more
+      this.balloonColors = [
+        color(255, 100, 100), // Red
+        color(100, 200, 255), // Blue  
+        color(255, 200, 100)  // Yellow
+      ]
+      this.balloonColor = random(this.balloonColors)
+      this.stringWave = 0
+      this.antLegPhase = random(TWO_PI)
+      
+    } else if (this.type === 'beetle') {
+      this.bobAmount = 4
+      this.driftSpeed = random(0.15, 0.35)
+      this.driftAngle = random(TWO_PI)
+      this.driftChangeRate = random(0.005, 0.015)
+      this.wingPhase = random(TWO_PI)
+      this.beetleColor = random() < 0.5 ? 
+        color(20, 60, 20) : // Dark green
+        color(40, 20, 60)   // Purple
+      this.driftDistance = 0 // Track total drift
+        
+    } else if (this.type === 'leaf') {
+      this.bobAmount = 2 // Leaves bob slightly
       let numPoints = 8
       for (let i = 0; i < numPoints; i++) {
         let angle = (TWO_PI / numPoints) * i
@@ -574,44 +606,292 @@ class Obstacle {
         if (i === 0 || i === numPoints / 2) r = radius * 1.3
         this.leafPoints.push({ angle: angle, radius: r })
       }
+    } else if (this.type === 'branch') {
+      // Keep for backwards compatibility
+      this.bobAmount = 0
+    }
+  }
+  
+  update() {
+    // Bobbing motion for all types
+    let bob = sin(frameCount * this.bobSpeed + this.bobOffset) * this.bobAmount
+    this.y = this.originalY + bob
+    
+    // Beetle-specific drift
+    if (this.type === 'beetle') {
+      // Store initial position if not set
+      if (!this.initialX) {
+        this.initialX = this.x
+        this.initialY = this.y
+      }
+      
+      // Slowly change drift direction using Perlin noise
+      this.driftAngle += (noise(frameCount * this.driftChangeRate, this.originalX * 0.01) - 0.5) * 0.1
+      
+      // Apply drift to original position
+      this.originalX += cos(this.driftAngle) * this.driftSpeed
+      this.originalY += sin(this.driftAngle) * this.driftSpeed * 0.5
+      
+      // Calculate total drift distance from initial position
+      this.driftDistance = dist(this.originalX, this.originalY, this.initialX, this.initialY)
+      
+      // Keep beetles on screen with soft boundaries
+      if (this.originalX < 80) {
+        this.driftAngle = random(-PI/4, PI/4)
+        this.originalX = 80
+      }
+      if (this.originalX > width - 80) {
+        this.driftAngle = random(3*PI/4, 5*PI/4)
+        this.originalX = width - 80
+      }
+      if (this.originalY < 80) {
+        this.driftAngle = random(-3*PI/4, -PI/4)
+        this.originalY = 80
+      }
+      if (this.originalY > height - 150) {
+        this.driftAngle = random(PI/4, 3*PI/4)
+        this.originalY = height - 150
+      }
+      
+      // Update actual position (with bob already applied to y)
+      this.x = this.originalX
+      
+      // Check if beetle has drifted too far and break attached strands
+      if (this.driftDistance > 100) {
+        this.breakAttachedStrands()
+      }
+    }
+    
+    // Update animation phases
+    if (this.type === 'balloon') {
+      this.stringWave = sin(frameCount * 0.05 + this.bobOffset) * 0.1
+      this.antLegPhase += 0.1
+    } else if (this.type === 'beetle') {
+      this.wingPhase += 0.15
+    }
+    
+    // For all moving obstacles, update any attached web strands
+    if (this.bobAmount > 0 || this.type === 'beetle') {
+      this.updateAttachedStrands()
+    }
+  }
+  
+  updateAttachedStrands() {
+    // Update web strands that are connected to this obstacle
+    for (let strand of webStrands) {
+      // Check if strand starts at this obstacle
+      if (dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10) {
+        strand.start.x = this.x
+        strand.start.y = this.y
+        if (strand.path && strand.path.length > 0) {
+          strand.path[0].x = this.x
+          strand.path[0].y = this.y
+        }
+      }
+      
+      // Check if strand ends at this obstacle
+      if (strand.end && dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10) {
+        strand.end.x = this.x
+        strand.end.y = this.y
+        if (strand.path && strand.path.length > 0) {
+          strand.path[strand.path.length - 1].x = this.x
+          strand.path[strand.path.length - 1].y = this.y
+        }
+      }
+    }
+  }
+  
+  breakAttachedStrands() {
+    // Break any strands attached to this beetle that has drifted too far
+    for (let strand of webStrands) {
+      let attachedToStart = dist(strand.start.x, strand.start.y, this.x, this.y) < this.radius + 10
+      let attachedToEnd = strand.end && dist(strand.end.x, strand.end.y, this.x, this.y) < this.radius + 10
+      
+      if (attachedToStart || attachedToEnd) {
+        // Mark strand as broken
+        strand.broken = true
+        
+        // Create dramatic snap particles
+        let snapX = attachedToStart ? strand.start.x : strand.end.x
+        let snapY = attachedToStart ? strand.start.y : strand.end.y
+        
+        // Red/pink particles for the snap
+        for (let i = 0; i < 8; i++) {
+          let p = new Particle(snapX, snapY)
+          p.color = color(255, random(100, 200), random(100, 150))
+          p.vel = createVector(random(-5, 5), random(-5, 2))
+          p.size = random(4, 8)
+          particles.push(p)
+        }
+        
+        // White strand particles
+        for (let i = 0; i < 4; i++) {
+          let p = new Particle(snapX, snapY)
+          p.color = color(255, 255, 255)
+          p.vel = createVector(random(-3, 3), random(-3, 0))
+          p.size = 3
+          particles.push(p)
+        }
+        
+        // Reset beetle drift after breaking strands
+        this.initialX = this.x
+        this.initialY = this.y
+        this.driftDistance = 0
+      }
     }
   }
 
   display () {
     push()
     translate(this.x, this.y)
-    rotate(this.rotation)
-
-    if (this.type === 'branch') {
-      if (gamePhase === 'NIGHT') {
-        stroke(40, 20, 0)
-        fill(50, 25, 5)
-      } else {
-        stroke(101, 67, 33)
-        fill(139, 90, 43)
-      }
-      strokeWeight(3)
-
+    
+    if (this.type === 'balloon') {
+      // Balloon with ant in basket!
       push()
-      strokeWeight(this.radius / 3)
-      line(-this.radius, 0, this.radius, 0)
-
-      strokeWeight(2)
-      line(-this.radius / 2, 0, -this.radius / 2 - 10, -10)
-      line(this.radius / 3, 0, this.radius / 3 + 8, -8)
-      line(0, 0, 5, -15)
-
-      stroke(80, 50, 20, 100)
+      
+      // String first (behind balloon)
+      stroke(80, 60, 40)
       strokeWeight(1)
-      for (let i = -this.radius; i < this.radius; i += 5) {
-        line(i, -2, i + 2, 2)
+      noFill()
+      beginShape()
+      for (let i = 0; i <= 10; i++) {
+        let t = i / 10
+        let stringX = sin(t * PI * 2 + this.stringWave) * 3
+        let stringY = t * 40 + this.radius
+        curveVertex(stringX, stringY)
       }
-      pop()
-
+      endShape()
+      
+      // Balloon shadow
       noStroke()
-      fill(255, 255, 255, 30)
-      ellipse(0, 0, this.radius * 2)
+      fill(0, 0, 0, 30)
+      ellipse(5, 5, this.radius * 2.2, this.radius * 2.5)
+      
+      // Main balloon
+      noStroke()
+      fill(red(this.balloonColor), green(this.balloonColor), blue(this.balloonColor), 150)
+      ellipse(0, 0, this.radius * 2.2, this.radius * 2.5)
+      fill(red(this.balloonColor) + 30, green(this.balloonColor) + 30, blue(this.balloonColor) + 30, 200)
+      ellipse(-this.radius * 0.3, -this.radius * 0.3, this.radius * 1.2, this.radius * 1.4)
+      // Highlight
+      fill(255, 255, 255, 120)
+      ellipse(-this.radius * 0.4, -this.radius * 0.5, this.radius * 0.5, this.radius * 0.6)
+      
+      // Basket
+      translate(0, this.radius + 10)
+      fill(139, 90, 43)
+      stroke(100, 60, 20)
+      strokeWeight(1)
+      // Trapezoid basket
+      beginShape()
+      vertex(-8, 0)
+      vertex(8, 0)
+      vertex(6, 10)
+      vertex(-6, 10)
+      endShape(CLOSE)
+      // Basket weave pattern
+      stroke(100, 60, 20, 100)
+      for (let i = -6; i < 6; i += 3) {
+        line(i, 2, i, 8)
+      }
+      for (let i = 2; i < 8; i += 3) {
+        line(-6, i, 6, i)
+      }
+      
+      // Ant in basket
+      translate(0, 5)
+      fill(20)
+      noStroke()
+      // Ant body
+      ellipse(0, 0, 6, 4) // Head
+      ellipse(0, 3, 5, 6) // Thorax
+      ellipse(0, 7, 7, 9) // Abdomen
+      // Ant legs (animated)
+      stroke(20)
+      strokeWeight(0.5)
+      for (let i = 0; i < 3; i++) {
+        let legAngle = this.antLegPhase + i * 0.5
+        let legSpread = 4 + sin(legAngle) * 2
+        line(-2, 3 + i * 2, -legSpread, 3 + i * 2)
+        line(2, 3 + i * 2, legSpread, 3 + i * 2)
+      }
+      // Antennae
+      line(-1, -1, -3, -3)
+      line(1, -1, 3, -3)
+      
+      pop()
+      
+    } else if (this.type === 'beetle') {
+      // Big beetle!
+      push()
+      rotate(this.rotation)
+      
+      // Shadow
+      noStroke()
+      fill(0, 0, 0, 40)
+      ellipse(3, 3, this.radius * 1.8, this.radius * 2.2)
+      
+      // Wings (if flying at night)
+      if (gamePhase === 'NIGHT') {
+        push()
+        fill(255, 255, 255, 100 + sin(this.wingPhase) * 50)
+        noStroke()
+        let wingSpread = sin(this.wingPhase) * 15
+        ellipse(-wingSpread, 0, 20, 12)
+        ellipse(wingSpread, 0, 20, 12)
+        pop()
+      }
+      
+      // Main beetle body
+      fill(red(this.beetleColor), green(this.beetleColor), blue(this.beetleColor))
+      stroke(0)
+      strokeWeight(2)
+      ellipse(0, 0, this.radius * 1.6, this.radius * 2)
+      
+      // Shell split line
+      stroke(0)
+      strokeWeight(1)
+      line(0, -this.radius, 0, this.radius)
+      
+      // Head
+      fill(10)
+      ellipse(0, -this.radius * 0.8, this.radius * 0.8, this.radius * 0.6)
+      
+      // Spots/pattern
+      noStroke()
+      fill(0, 0, 0, 80)
+      ellipse(-this.radius * 0.3, 0, this.radius * 0.4)
+      ellipse(this.radius * 0.3, -this.radius * 0.2, this.radius * 0.3)
+      ellipse(this.radius * 0.2, this.radius * 0.4, this.radius * 0.35)
+      ellipse(-this.radius * 0.25, this.radius * 0.3, this.radius * 0.25)
+      
+      // Legs
+      stroke(0)
+      strokeWeight(2)
+      for (let i = 0; i < 3; i++) {
+        let legY = -this.radius * 0.3 + i * this.radius * 0.3
+        let legMove = sin(this.wingPhase * 2 + i) * 2
+        line(-this.radius * 0.8, legY, -this.radius * 1.2 + legMove, legY + 5)
+        line(this.radius * 0.8, legY, this.radius * 1.2 - legMove, legY + 5)
+      }
+      
+      // Antennae
+      strokeWeight(1)
+      line(-3, -this.radius * 1.1, -8, -this.radius * 1.4)
+      line(3, -this.radius * 1.1, 8, -this.radius * 1.4)
+      
+      // Eyes
+      fill(255, 0, 0)
+      noStroke()
+      ellipse(-5, -this.radius * 0.7, 4)
+      ellipse(5, -this.radius * 0.7, 4)
+      
+      pop()
+      
     } else if (this.type === 'leaf') {
+      // Original leaf code
+      rotate(this.rotation)
+      
       if (gamePhase === 'NIGHT') {
         fill(20, 40, 20)
         stroke(10, 20, 10)
@@ -646,6 +926,39 @@ class Obstacle {
       line(0, 0, this.radius / 2, -this.radius / 2)
       line(0, 0, -this.radius / 2, this.radius / 2)
       line(0, 0, this.radius / 2, this.radius / 2)
+      
+    } else if (this.type === 'branch') {
+      // Keep old branch code for backwards compatibility
+      rotate(this.rotation)
+      
+      if (gamePhase === 'NIGHT') {
+        stroke(40, 20, 0)
+        fill(50, 25, 5)
+      } else {
+        stroke(101, 67, 33)
+        fill(139, 90, 43)
+      }
+      strokeWeight(3)
+
+      push()
+      strokeWeight(this.radius / 3)
+      line(-this.radius, 0, this.radius, 0)
+
+      strokeWeight(2)
+      line(-this.radius / 2, 0, -this.radius / 2 - 10, -10)
+      line(this.radius / 3, 0, this.radius / 3 + 8, -8)
+      line(0, 0, 5, -15)
+
+      stroke(80, 50, 20, 100)
+      strokeWeight(1)
+      for (let i = -this.radius; i < this.radius; i += 5) {
+        line(i, -2, i + 2, 2)
+      }
+      pop()
+
+      noStroke()
+      fill(255, 255, 255, 30)
+      ellipse(0, 0, this.radius * 2)
     }
 
     pop()
