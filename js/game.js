@@ -87,26 +87,22 @@ function setup() {
         barkTextures: barkTextures
     };
     
-    // Place spider on the home branch
-    let spiderStartX = homeBranchSide === 'left' ? 
-        homeBranchLength * 0.8 : 
-        width - homeBranchLength * 0.8;
+    // Place spider at the tip of the branch
+    let spiderStartX = branchEndX; // Place at the end/tip
     
-    // Calculate the visual top of the branch at spider's position
-    let branchStart = Math.min(branchStartX, branchEndX);
-    let branchEnd = Math.max(branchStartX, branchEndX);
-    let t = (spiderStartX - branchStart) / (branchEnd - branchStart);
-    t = constrain(t, 0, 1);
+    // At the tip (t=1), thickness is 35% of original
+    let branchTopThickness = homeBranchThickness * 0.35;
     
-    // Branch thickness tapers from full to 35%
-    let branchTopThickness = lerp(homeBranchThickness, homeBranchThickness * 0.35, t);
+    // The branch is drawn centered at branch.y, so the top is at:
+    let branchSurfaceY = homeBranchY - branchTopThickness;
     
-    // Account for branch angle
-    let angleOffset = (spiderStartX - branchStart) * Math.tan(homeBranchSide === 'left' ? 0.05 : -0.05);
+    // Add slight angle correction
+    let angleCorrection = (spiderStartX - branchStartX) * window.homeBranch.angle;
+    branchSurfaceY += angleCorrection;
     
-    // Place spider on top of the visual branch
-    spider = new Spider(spiderStartX, homeBranchY - branchTopThickness + angleOffset);
-    
+    // Place spider on top of the visual branch at the tip (8 is spider radius)
+    spider = new Spider(spiderStartX, branchSurfaceY - 8);
+
     // Add invisible obstacles along the branch for web anchor points
     let numBranchAnchors = 3;
     for (let i = 0; i < numBranchAnchors; i++) {

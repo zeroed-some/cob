@@ -97,29 +97,34 @@ class Spider {
             let branchStart = Math.min(branch.startX, branch.endX);
             let branchEnd = Math.max(branch.startX, branch.endX);
             
-            if (this.pos.x >= branchStart && this.pos.x <= branchEnd) {
+            // Since the branch angle is very small (0.05 radians ≈ 3 degrees), 
+            // we can use a simpler approximation
+            if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
                 // Calculate position along branch (0 to 1)
                 let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
                 t = constrain(t, 0, 1);
                 
-                // Base thickness tapers from full at start to 35% at end
-                let branchTopThickness = lerp(branch.thickness, branch.thickness * 0.35, t);
+                // Branch visual thickness tapers from full at start to 35% at end
+                // This matches exactly how it's drawn in the bezier curves
+                let branchTopThickness = lerp(branch.thickness * 0.9, branch.thickness * 0.35, t);
                 
-                // Account for branch angle
-                let angleOffset = (this.pos.x - branchStart) * Math.tan(branch.angle);
+                // The branch is drawn centered at branch.y
+                // With small angle approximation: the top of the branch is at
+                let branchSurfaceY = branch.y - branchTopThickness;
                 
-                // The visual top of the branch (where spider should land)
-                let branchTopY = branch.y - branchTopThickness + angleOffset;
+                // Add slight angle correction (for small angles, tan ≈ sin ≈ angle in radians)
+                let angleCorrection = (this.pos.x - branchStart) * branch.angle;
+                branchSurfaceY += angleCorrection;
                 
-                // Only trigger collision if spider is actually above and close to the branch
-                // Previous position check to ensure we're coming from above
+                // Check if spider is crossing the branch from above
                 let prevY = this.pos.y - this.vel.y;
                 
-                if (prevY <= branchTopY && // Was above the branch
-                    this.pos.y + this.radius >= branchTopY && // Now at or below surface
-                    this.pos.y - this.radius <= branchTopY + branch.thickness) { // But not too far below
+                if (prevY <= branchSurfaceY && // Was above
+                    this.pos.y + this.radius >= branchSurfaceY && // Now at or below
+                    this.pos.y < branch.y + branch.thickness) { // Not too far below
                     
-                    this.pos.y = branchTopY - this.radius;
+                    // Place spider on the branch surface
+                    this.pos.y = branchSurfaceY - this.radius;
                     this.land();
                 }
             }
@@ -272,9 +277,10 @@ class Fly {
         this.wingPhase = random(TWO_PI);
         this.wanderAngle = random(TWO_PI);
         this.glowIntensity = random(150, 255);
-        this.webTouchCount = 0;
-        this.requiredStrands = 3;
         this.touchedStrands = new Set();
+        this.slowedBy = new Set(); // Track which strands are slowing us
+        this.baseSpeed = 3;
+        this.currentSpeed = this.baseSpeed;
     }
 
     update() {
@@ -295,8 +301,9 @@ class Fly {
         wanderForce.mult(0.1);
         this.acc.add(wanderForce);
         
+        // Apply current speed (which may be slowed)
         this.vel.add(this.acc);
-        this.vel.limit(3);
+        this.vel.limit(this.currentSpeed);
         this.pos.add(this.vel);
         this.acc.mult(0);
         
@@ -305,33 +312,99 @@ class Fly {
         if (this.pos.y < -30) this.pos.y = height + 30;
         if (this.pos.y > height + 30) this.pos.y = -30;
         
-        this.touchedStrands.clear();
-        for (let strand of webStrands) {
-            let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
-            if (d < this.radius + 3) {
-                this.touchedStrands.add(strand);
-            }
-        }
+        // Check web collisions
+        this.checkWebCollisions();
+    }
+
+    checkWebCollisions() {
+        let currentlyTouching = new Set();
         
-        if (this.touchedStrands.size >= this.requiredStrands) {
-            this.caught = true;
-            for (let strand of this.touchedStrands) {
-                strand.vibrate(5);
+        for (let strand of webStrands) {
+            let touching = false;
+            
+            // Check collision with strand path
+            if (strand.path && strand.path.length > 1) {
+                for (let i = 0; i < strand.path.length - 1; i++) {
+                    let p1 = strand.path[i];
+                    let p2 = strand.path[i + 1];
+                    let d = this.pointToLineDistance(this.pos, p1, p2);
+                    if (d < this.radius + 3) {
+                        touching = true;
+                        break;
+                    }
+                }
+            } else if (strand.start && strand.end) {
+                // Fallback for strands without path
+                let d = this.pointToLineDistance(this.pos, strand.start, strand.end);
+                if (d < this.radius + 3) {
+                    touching = true;
+                }
             }
-            for (let strand of webStrands) {
+            
+            if (touching) {
+                currentlyTouching.add(strand);
+                
+                // If this is a new strand we're touching
                 if (!this.touchedStrands.has(strand)) {
-                    for (let touched of this.touchedStrands) {
-                        let d1 = dist(strand.start.x, strand.start.y, touched.start.x, touched.start.y);
-                        let d2 = dist(strand.start.x, strand.start.y, touched.end.x, touched.end.y);
-                        let d3 = dist(strand.end.x, strand.end.y, touched.start.x, touched.start.y);
-                        let d4 = dist(strand.end.x, strand.end.y, touched.end.x, touched.end.y);
-                        if (min(d1, d2, d3, d4) < 50) {
-                            strand.vibrate(2);
-                            break;
+                    this.touchedStrands.add(strand);
+                    
+                    // Vibrate the web when first touching
+                    strand.vibrate(3);
+                    
+                    // First strand slows us down
+                    if (this.touchedStrands.size === 1) {
+                        this.currentSpeed = this.baseSpeed * 0.4; // Slow to 40% speed
+                        this.slowedBy.add(strand);
+                        
+                        // Visual feedback - yellow particles for slowing
+                        for (let j = 0; j < 3; j++) {
+                            let p = new Particle(this.pos.x, this.pos.y);
+                            p.color = color(255, 255, 0, 150);
+                            p.vel = createVector(random(-1, 1), random(-1, 1));
+                            p.size = 3;
+                            particles.push(p);
+                        }
+                    }
+                    // Second strand catches us
+                    else if (this.touchedStrands.size >= 2 && !this.caught) {
+                        this.caught = true;
+                        this.currentSpeed = 0;
+                        
+                        // Stronger vibration when caught
+                        strand.vibrate(8);
+                        
+                        // Also vibrate nearby strands
+                        for (let otherStrand of webStrands) {
+                            if (otherStrand !== strand) {
+                                for (let touchedStrand of this.touchedStrands) {
+                                    let d1 = dist(otherStrand.start.x, otherStrand.start.y, touchedStrand.start.x, touchedStrand.start.y);
+                                    let d2 = dist(otherStrand.start.x, otherStrand.start.y, touchedStrand.end.x, touchedStrand.end.y);
+                                    let d3 = dist(otherStrand.end.x, otherStrand.end.y, touchedStrand.start.x, touchedStrand.start.y);
+                                    let d4 = dist(otherStrand.end.x, otherStrand.end.y, touchedStrand.end.x, touchedStrand.end.y);
+                                    if (min(d1, d2, d3, d4) < 50) {
+                                        otherStrand.vibrate(2);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Create caught particles
+                        for (let j = 0; j < 6; j++) {
+                            let p = new Particle(this.pos.x, this.pos.y);
+                            p.color = color(255, 200, 0, 200);
+                            p.vel = createVector(random(-2, 2), random(-2, 2));
+                            particles.push(p);
                         }
                     }
                 }
             }
+        }
+        
+        // If we're no longer touching strands we were slowed by, speed back up
+        if (this.slowedBy.size > 0 && currentlyTouching.size === 0) {
+            this.currentSpeed = this.baseSpeed;
+            this.slowedBy.clear();
         }
     }
 
@@ -351,7 +424,8 @@ class Fly {
         push();
         translate(this.pos.x, this.pos.y);
         
-        if (this.touchedStrands.size > 0 && !this.caught) {
+        // Show slowdown effect
+        if (this.slowedBy.size > 0 && !this.caught) {
             stroke(255, 255, 0, 100);
             strokeWeight(1);
             noFill();
@@ -373,6 +447,9 @@ class Fly {
         
         if (!this.stuck) {
             this.wingPhase += 0.5;
+            // Wing animation slows down when slowed
+            let wingSpeed = this.slowedBy.size > 0 ? 0.25 : 0.5;
+            this.wingPhase += wingSpeed;
             let wingSpread = sin(this.wingPhase) * 5;
             
             fill(255, 255, 255, 150);
@@ -545,6 +622,7 @@ class Particle {
         this.vel = createVector(random(-3, 3), random(-5, -2));
         this.lifetime = 255;
         this.color = color(255, random(200, 255), random(100, 200));
+        this.size = 6;  // Default size
     }
     
     update() {
@@ -557,7 +635,7 @@ class Particle {
         push();
         noStroke();
         fill(red(this.color), green(this.color), blue(this.color), this.lifetime);
-        ellipse(this.pos.x, this.pos.y, 6);
+        ellipse(this.pos.x, this.pos.y, this.size);
         pop();
     }
     
