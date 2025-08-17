@@ -18,6 +18,7 @@ let gameOver = false
 let gameOverTimer = 0
 let deathReason = ''
 let finalScore = 0
+let screenShake = 0
 
 // Resources
 let webSilk = 100
@@ -320,27 +321,50 @@ class Notification {
   constructor (text, color) {
     this.text = text
     this.color = color
-    this.y = height * 0.3
-    this.alpha = 255
     this.lifetime = 180 // 3 seconds
+    this.alpha = 255
+
+    // IMPROVED: Stacking system to prevent overlap
+    // Find how many notifications are currently active
+    let activeNotifications = notifications.filter(n => n.lifetime > 60).length
+
+    // Stack notifications vertically
+    this.y = height * 0.3 + activeNotifications * 35 // 35 pixels between notifications
+
+    // Prevent too many notifications
+    if (notifications.length > 5) {
+      notifications.shift() // Remove oldest
+    }
   }
 
   update () {
     this.lifetime--
+
+    // Fade out in the last second
     if (this.lifetime < 60) {
       this.alpha = map(this.lifetime, 0, 60, 0, 255)
     }
-    this.y -= 0.5 // Slowly rise
+
+    // Slowly rise
+    this.y -= 0.3 // Slower rise to maintain readability
   }
 
   display () {
     push()
     textAlign(CENTER)
-    textSize(24)
-    strokeWeight(4)
+
+    // Add background for better readability
+    fill(0, 0, 0, this.alpha * 0.5)
+    noStroke()
+    rectMode(CENTER)
+    rect(width / 2, this.y, textWidth(this.text) + 20, 30, 5)
+
+    // Text with outline for visibility
+    textSize(20) // Slightly smaller for less overlap
+    strokeWeight(3)
     stroke(0, 0, 0, this.alpha)
     fill(red(this.color), green(this.color), blue(this.color), this.alpha)
-    text(this.text, width / 2, this.y)
+    text(this.text, width / 2, this.y + 5)
     pop()
   }
 
@@ -662,45 +686,36 @@ function draw () {
     gamePhase = 'DAWN'
     phaseTimer = 0
 
-    // ENHANCED: Calculate dawn stamina with CLEAR BONUS DISPLAY
+    // Calculate dawn stamina with CLEAR BONUS DISPLAY
     let baseStamina = 30
     let flyBonus = fliesMunchedLastNight * 10
-    staminaBonus = flyBonus // Store for display
+    staminaBonus = flyBonus
 
     maxJumpStamina = baseStamina + flyBonus
-    maxJumpStamina = min(maxJumpStamina, 200) // Cap at 200 instead of 150
+    maxJumpStamina = min(maxJumpStamina, 200)
     jumpStamina = maxJumpStamina
 
-    // Clear notification showing stamina calculation
-    notifications.push(
-      new Notification(
-        `Dawn Stamina: ${baseStamina} base + ${flyBonus} (${fliesMunchedLastNight} flies × 10) = ${maxJumpStamina}`,
-        color(255, 200, 100)
-      )
-    )
+    // IMPROVED: Combine notifications to reduce overlap
+    let staminaMessage = `Dawn: ${maxJumpStamina} stamina (${baseStamina} + ${flyBonus} from ${fliesMunchedLastNight} flies)`
+    let warningMessage = ''
 
-    // Warning notifications based on stamina level
     if (maxJumpStamina <= 50) {
+      warningMessage = ' ⚠️ DANGER!'
       notifications.push(
-        new Notification(
-          '⚠️ DANGER: Very low stamina! Eat more flies next night!',
-          color(255, 50, 50)
-        )
+        new Notification(staminaMessage + warningMessage, color(255, 50, 50))
       )
     } else if (maxJumpStamina <= 80) {
+      warningMessage = ' - Low stamina!'
       notifications.push(
-        new Notification(
-          'Warning: Low stamina for dawn survival',
-          color(255, 150, 50)
-        )
+        new Notification(staminaMessage + warningMessage, color(255, 150, 50))
       )
     } else if (maxJumpStamina >= 150) {
+      warningMessage = ' - Well fed!'
       notifications.push(
-        new Notification(
-          'Excellent stamina! Well fed spider!',
-          color(100, 255, 100)
-        )
+        new Notification(staminaMessage + warningMessage, color(100, 255, 100))
       )
+    } else {
+      notifications.push(new Notification(staminaMessage, color(255, 200, 100)))
     }
 
     // Spawn birds
