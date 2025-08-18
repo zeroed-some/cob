@@ -16,6 +16,12 @@ class WebStrand {
         this.damping = 0.75; // Damping factor for recoil (much faster damping to prevent accumulation)
         this.springConstant = 0.04; // Spring stiffness (much softer spring)
         this.flexibility = 1.0; // How much the web can be dragged by flies
+        
+        // NEW: Track obstacle attachments
+        this.startObstacle = null;
+        this.startAngle = 0;
+        this.endObstacle = null;
+        this.endAngle = 0;
     }
 
     update() {
@@ -254,6 +260,9 @@ class WebNode {
         this.vx = 0;
         this.vy = 0;
         this.pinned = false;
+        
+        this.attachedObstacle = null;
+        this.attachmentAngle = 0;
     }
 
     applyForce(fx, fy) {

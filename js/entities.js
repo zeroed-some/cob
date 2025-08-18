@@ -350,125 +350,132 @@ class Spider {
     this.land()
   }
 
-  land () {
-    this.vel.mult(0)
-    this.isAirborne = false
-    this.canJump = true
+land() {
+  this.vel.mult(0);
+  this.isAirborne = false;
+  this.canJump = true;
 
-    // FIX: Check if we're actually landing on something valid
-    let landedOnSomething = false
-    let landingPoint = null // Store where we're landing for anchor
+  // FIX: Check if we're actually landing on something valid
+  let landedOnSomething = false;
+  let landingPoint = null; // Store where we're landing for anchor
+  let landingObstacle = null; // NEW: Track which obstacle we're landing on
 
-    // Check if on ground
-    if (this.pos.y >= height - this.radius - 5) {
-      landedOnSomething = true
-      landingPoint = createVector(this.pos.x, height)
-    }
-
-    // Check if on an obstacle
-    if (!landedOnSomething) {
-      for (let obstacle of obstacles) {
-        if (this.checkObstacleCollision(obstacle)) {
-          landedOnSomething = true
-          // Calculate edge point for anchor
-          let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
-          landingPoint = createVector(
-            obstacle.x + cos(angle) * obstacle.radius,
-            obstacle.y + sin(angle) * obstacle.radius
-          )
-          break
-        }
-      }
-    }
-
-    // Check if on a web strand
-    if (!landedOnSomething) {
-      for (let strand of webStrands) {
-        if (
-          strand !== currentStrand &&
-          !strand.broken &&
-          this.checkStrandCollision(strand)
-        ) {
-          landedOnSomething = true
-          // For web strands, use spider position as anchor
-          landingPoint = this.pos.copy()
-          break
-        }
-      }
-    }
-
-    // Check if on home branch
-    if (!landedOnSomething && window.homeBranch) {
-      let branch = window.homeBranch
-      let branchStart = Math.min(branch.startX, branch.endX)
-      let branchEnd = Math.max(branch.startX, branch.endX)
-
-      if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
-        let t = (this.pos.x - branchStart) / (branchEnd - branchStart)
-        t = constrain(t, 0, 1)
-        let branchTopThickness = lerp(
-          branch.thickness * 0.9,
-          branch.thickness * 0.35,
-          t
-        )
-        let branchSurfaceY = branch.y - branchTopThickness
-        let angleCorrection = (this.pos.x - branchStart) * branch.angle
-        branchSurfaceY += angleCorrection
-
-        if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
-          landedOnSomething = true
-          landingPoint = createVector(this.pos.x, branchSurfaceY)
-        }
-      }
-    }
-
-    // FIX: If we're deploying web but didn't land on anything valid, destroy the web
-    if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
-      if (landedOnSomething && landingPoint) {
-        // Valid landing - finalize the web at the landing point
-        currentStrand.end = landingPoint.copy() // Use edge point, not spider center
-        if (!currentStrand.path || currentStrand.path.length === 0) {
-          currentStrand.path = [landingPoint.copy()]
-        } else {
-          currentStrand.path.push(landingPoint.copy())
-        }
-        webNodes.push(new WebNode(landingPoint.x, landingPoint.y))
-
-        // Update last anchor for next web
-        this.lastAnchorPoint = landingPoint.copy()
-      } else {
-        // Invalid landing in mid-air - destroy the web!
-        if (
-          webStrands.length > 0 &&
-          webStrands[webStrands.length - 1] === currentStrand
-        ) {
-          webStrands.pop() // Remove the invalid strand
-
-          // Create poof particles
-          for (let i = 0; i < 8; i++) {
-            let p = new Particle(this.pos.x, this.pos.y)
-            p.color = color(255, 255, 255, 150)
-            p.vel = createVector(random(-3, 3), random(-3, 3))
-            p.size = 4
-            particles.push(p)
-          }
-
-          // Notification
-          if (notifications.length < 3) {
-            notifications.push(
-              new Notification('Web needs anchor point!', color(255, 150, 150))
-            )
-          }
-        }
-      }
-    } else if (landedOnSomething && landingPoint) {
-      // Update last anchor point even when not deploying web
-      this.lastAnchorPoint = landingPoint.copy()
-    }
-
-    currentStrand = null
-    isDeployingWeb = false
+  // Check if on ground
+  if (this.pos.y >= height - this.radius - 5) {
+    landedOnSomething = true;
+    landingPoint = createVector(this.pos.x, height);
   }
+
+  // Check if on an obstacle
+  if (!landedOnSomething) {
+    for (let obstacle of obstacles) {
+      if (this.checkObstacleCollision(obstacle)) {
+        landedOnSomething = true;
+        landingObstacle = obstacle; // NEW: Store the obstacle
+        // Calculate edge point for anchor
+        let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x);
+        landingPoint = createVector(
+          obstacle.x + cos(angle) * obstacle.radius,
+          obstacle.y + sin(angle) * obstacle.radius
+        );
+        break;
+      }
+    }
+  }
+
+  // Check if on a web strand
+  if (!landedOnSomething) {
+    for (let strand of webStrands) {
+      if (strand !== currentStrand && !strand.broken && this.checkStrandCollision(strand)) {
+        landedOnSomething = true;
+        // For web strands, use spider position as anchor
+        landingPoint = this.pos.copy();
+        break;
+      }
+    }
+  }
+
+  // Check if on home branch
+  if (!landedOnSomething && window.homeBranch) {
+    let branch = window.homeBranch;
+    let branchStart = Math.min(branch.startX, branch.endX);
+    let branchEnd = Math.max(branch.startX, branch.endX);
+
+    if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
+      let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
+      t = constrain(t, 0, 1);
+      let branchTopThickness = lerp(branch.thickness * 0.9, branch.thickness * 0.35, t);
+      let branchSurfaceY = branch.y - branchTopThickness;
+      let angleCorrection = (this.pos.x - branchStart) * branch.angle;
+      branchSurfaceY += angleCorrection;
+
+      if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
+        landedOnSomething = true;
+        landingPoint = createVector(this.pos.x, branchSurfaceY);
+      }
+    }
+  }
+
+  // FIX: If we're deploying web but didn't land on anything valid, destroy the web
+  if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
+    if (landedOnSomething && landingPoint) {
+      // Valid landing - finalize the web at the landing point
+      currentStrand.end = landingPoint.copy(); // Use edge point, not spider center
+      
+      // NEW: Track obstacle attachment for the end point
+      if (landingObstacle) {
+        currentStrand.endObstacle = landingObstacle;
+        currentStrand.endAngle = atan2(
+          landingPoint.y - landingObstacle.y,
+          landingPoint.x - landingObstacle.x
+        );
+      }
+      
+      if (!currentStrand.path || currentStrand.path.length === 0) {
+        currentStrand.path = [landingPoint.copy()];
+      } else {
+        currentStrand.path.push(landingPoint.copy());
+      }
+      
+      let newNode = new WebNode(landingPoint.x, landingPoint.y);
+      // NEW: Track node attachment
+      if (landingObstacle) {
+        newNode.attachedObstacle = landingObstacle;
+        newNode.attachmentAngle = currentStrand.endAngle;
+      }
+      webNodes.push(newNode);
+
+      // Update last anchor for next web
+      this.lastAnchorPoint = landingPoint.copy();
+    } else {
+      // Invalid landing in mid-air - destroy the web!
+      if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
+        webStrands.pop(); // Remove the invalid strand
+
+        // Create poof particles
+        for (let i = 0; i < 8; i++) {
+          let p = new Particle(this.pos.x, this.pos.y);
+          p.color = color(255, 255, 255, 150);
+          p.vel = createVector(random(-3, 3), random(-3, 3));
+          p.size = 4;
+          particles.push(p);
+        }
+
+        // Notification
+        if (notifications.length < 3) {
+          notifications.push(new Notification("Web needs anchor point!", color(255, 150, 150)));
+        }
+      }
+    }
+  } else if (landedOnSomething && landingPoint) {
+    // Update last anchor point even when not deploying web
+    this.lastAnchorPoint = landingPoint.copy();
+  }
+
+  currentStrand = null;
+  isDeployingWeb = false;
+}
+
 
   display () {
     push()
@@ -904,38 +911,50 @@ class Obstacle {
     }
   }
 
-  updateAttachedStrands () {
-    // Update web strands that are connected to this obstacle
-    for (let strand of webStrands) {
-      // Check if strand starts near this obstacle's edge
-      let startDist = dist(strand.start.x, strand.start.y, this.x, this.y)
-      if (startDist >= this.radius - 5 && startDist <= this.radius + 15) {
-        // Strand is attached to edge - update to maintain edge connection
-        let angle = atan2(strand.start.y - this.y, strand.start.x - this.x)
-        strand.start.x = this.x + cos(angle) * this.radius
-        strand.start.y = this.y + sin(angle) * this.radius
-        if (strand.path && strand.path.length > 0) {
-          strand.path[0].x = strand.start.x
-          strand.path[0].y = strand.start.y
-        }
+updateAttachedStrands() {
+  // Update web strands that are connected to this obstacle
+  for (let strand of webStrands) {
+    if (!strand || strand.broken) continue;
+    
+    // Check if strand starts at this obstacle
+    if (strand.startObstacle === this) {
+      // Update the start position to maintain the attachment
+      let angle = strand.startAngle; // Use stored angle
+      strand.start.x = this.x + cos(angle) * this.radius;
+      strand.start.y = this.y + sin(angle) * this.radius;
+      
+      // Update path if it exists
+      if (strand.path && strand.path.length > 0) {
+        strand.path[0].x = strand.start.x;
+        strand.path[0].y = strand.start.y;
       }
-
-      // Check if strand ends near this obstacle's edge
-      if (strand.end) {
-        let endDist = dist(strand.end.x, strand.end.y, this.x, this.y)
-        if (endDist >= this.radius - 5 && endDist <= this.radius + 15) {
-          // Strand is attached to edge - update to maintain edge connection
-          let angle = atan2(strand.end.y - this.y, strand.end.x - this.x)
-          strand.end.x = this.x + cos(angle) * this.radius
-          strand.end.y = this.y + sin(angle) * this.radius
-          if (strand.path && strand.path.length > 0) {
-            strand.path[strand.path.length - 1].x = strand.end.x
-            strand.path[strand.path.length - 1].y = strand.end.y
-          }
-        }
+    }
+    
+    // Check if strand ends at this obstacle
+    if (strand.endObstacle === this) {
+      // Update the end position to maintain the attachment
+      let angle = strand.endAngle; // Use stored angle
+      strand.end.x = this.x + cos(angle) * this.radius;
+      strand.end.y = this.y + sin(angle) * this.radius;
+      
+      // Update path if it exists
+      if (strand.path && strand.path.length > 0) {
+        strand.path[strand.path.length - 1].x = strand.end.x;
+        strand.path[strand.path.length - 1].y = strand.end.y;
       }
     }
   }
+  
+  // Also update web nodes attached to this obstacle
+  for (let node of webNodes) {
+    if (node.attachedObstacle === this) {
+      let angle = node.attachmentAngle;
+      node.x = this.x + cos(angle) * this.radius;
+      node.y = this.y + sin(angle) * this.radius;
+    }
+  }
+}
+
 
   breakAttachedStrands () {
     // Check for strands attached to this obstacle's edge

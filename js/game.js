@@ -2509,28 +2509,49 @@ function updateResources () {
   }
 }
 
-function handleWebDeployment () {
+function handleWebDeployment() {
   // Handle keyboard-based web deployment
   if (spacePressed && spider.isAirborne && !isDeployingWeb && webSilk > 10) {
-    isDeployingWeb = true
-    currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null)
-    currentStrand.path = [spider.lastAnchorPoint.copy()]
-    webStrands.push(currentStrand)
-    webNodes.push(
-      new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y)
-    )
+    isDeployingWeb = true;
+    currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
+    currentStrand.path = [spider.lastAnchorPoint.copy()];
+    
+    // NEW: Check if starting from an obstacle
+    for (let obstacle of obstacles) {
+      let d = dist(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y, obstacle.x, obstacle.y);
+      // Check if anchor is on obstacle edge (within tolerance)
+      if (abs(d - obstacle.radius) < 10) {
+        currentStrand.startObstacle = obstacle;
+        currentStrand.startAngle = atan2(
+          spider.lastAnchorPoint.y - obstacle.y,
+          spider.lastAnchorPoint.x - obstacle.x
+        );
+        break;
+      }
+    }
+    
+    webStrands.push(currentStrand);
+    
+    let newNode = new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y);
+    // NEW: Track node attachment if on obstacle
+    if (currentStrand.startObstacle) {
+      newNode.attachedObstacle = currentStrand.startObstacle;
+      newNode.attachmentAngle = currentStrand.startAngle;
+    }
+    webNodes.push(newNode);
   }
 
   // Update web for keyboard controls
   if (currentStrand && isDeployingWeb && spider.isAirborne && spacePressed) {
-    currentStrand.end = spider.pos.copy()
+    currentStrand.end = spider.pos.copy();
     if (frameCount % 2 === 0) {
-      currentStrand.path.push(spider.pos.copy())
+      currentStrand.path.push(spider.pos.copy());
     }
   }
 
   // Touch-based web deployment is handled in touchMoved()
 }
+
 
 function updateUI () {
   // Update control instructions based on device
@@ -3002,40 +3023,58 @@ function recycleNearbyWeb () {
   }
 }
 
-function touchStarted () {
+function touchStarted() {
   if (touches.length > 0) {
-    touchStartTime = millis()
-    touchStartX = touches[0].x
-    touchStartY = touches[0].y
+    touchStartTime = millis();
+    touchStartX = touches[0].x;
+    touchStartY = touches[0].y;
 
     // Check for double tap on spider to munch
-    let touchOnSpider =
-      dist(touches[0].x, touches[0].y, spider.pos.x, spider.pos.y) < 30
+    let touchOnSpider = dist(touches[0].x, touches[0].y, spider.pos.x, spider.pos.y) < 30;
 
     if (touchOnSpider && millis() - lastTapTime < 300) {
       // Double tap detected on spider - MUNCH!
-      spider.munch()
-      lastTapTime = 0 // Reset to prevent triple tap
+      spider.munch();
+      lastTapTime = 0; // Reset to prevent triple tap
     } else if (!spider.isAirborne) {
       // Single tap while on ground - jump
-      spider.jump(touches[0].x, touches[0].y)
-      lastTapTime = millis()
+      spider.jump(touches[0].x, touches[0].y);
+      lastTapTime = millis();
     } else if (spider.isAirborne && webSilk > 10 && !isDeployingWeb) {
       // Start web deployment if airborne (only if not already deploying)
-      touchHolding = true
-      isDeployingWeb = true
-      currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null)
-      currentStrand.path = [spider.lastAnchorPoint.copy()]
-      webStrands.push(currentStrand)
-      webNodes.push(
-        new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y)
-      )
+      touchHolding = true;
+      isDeployingWeb = true;
+      currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
+      currentStrand.path = [spider.lastAnchorPoint.copy()];
+      
+      for (let obstacle of obstacles) {
+        let d = dist(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y, obstacle.x, obstacle.y);
+        // Check if anchor is on obstacle edge (within tolerance)
+        if (abs(d - obstacle.radius) < 10) {
+          currentStrand.startObstacle = obstacle;
+          currentStrand.startAngle = atan2(
+            spider.lastAnchorPoint.y - obstacle.y,
+            spider.lastAnchorPoint.x - obstacle.x
+          );
+          break;
+        }
+      }
+      
+      webStrands.push(currentStrand);
+      
+      let newNode = new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y);
+      // NEW: Track node attachment if on obstacle
+      if (currentStrand.startObstacle) {
+        newNode.attachedObstacle = currentStrand.startObstacle;
+        newNode.attachmentAngle = currentStrand.startAngle;
+      }
+      webNodes.push(newNode);
     } else if (spider.isAirborne && isDeployingWeb) {
       // If already deploying and user taps again, just continue (don't create new strand)
-      touchHolding = true
+      touchHolding = true;
     }
   }
-  return false // Prevent default
+  return false; // Prevent default
 }
 
 function touchMoved () {
