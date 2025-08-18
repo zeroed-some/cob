@@ -59,6 +59,7 @@ let notifications = []
 // PHASE 3: Upgrade System
 let playerPoints = 0
 let shopOpen = false
+let spentPoints = 0
 
 // PHASE 4: Dawn Exhaustion System
 let jumpStamina = 100
@@ -476,48 +477,99 @@ function setup () {
   let numObstacles = Math.floor((width * height) / 60000) // More obstacles
   numObstacles = constrain(numObstacles, 15, 25)
 
-  // Create ant balloons
-  let numBalloons = Math.floor(random(15, 21))
-  for (let i = 0; i < numBalloons; i++) {
-    let attempts = 0
-    let placed = false
+// Create ant balloons
+let numBalloons = Math.floor(random(15, 21))
+for (let i = 0; i < numBalloons; i++) {
+  let attempts = 0
+  let placed = false
 
-    while (!placed && attempts < 30) {
-      // Distribute balloons more evenly across the screen
-      let gridX = (i % 3) * (width / 3) + random(50, width / 3 - 50)
-      let gridY = Math.floor(i / 3) * (height / 4) + random(40, height / 4)
-
-      let x = constrain(gridX, 80, width - 80)
-      let y = constrain(gridY, 60, height * 0.6) // Balloons in upper 60% of screen
-      let radius = random(35, 50) // Varied sizes for visual interest
-
-      let valid = true
-      // Check distance from other obstacles
-      for (let obstacle of obstacles) {
-        if (
-          dist(x, y, obstacle.x, obstacle.y) <
-          radius + obstacle.radius + 40
-        ) {
-          valid = false
-          break
+  while (!placed && attempts < 30) {
+    // FIX: True random distribution with better spread
+    let x, y
+    
+    // Use different strategies for better distribution
+    let strategy = random()
+    
+    if (strategy < 0.3) {
+      // 30% - Truly random across upper area
+      x = random(80, width - 80)
+      y = random(60, height * 0.5)
+    } else if (strategy < 0.6) {
+      // 30% - Radial distribution from center
+      let angle = random(TWO_PI)
+      let radius = random(100, min(width, height) * 0.35)
+      x = width / 2 + cos(angle) * radius
+      y = height * 0.35 + sin(angle) * radius * 0.7  // Elliptical, flatter
+      x = constrain(x, 80, width - 80)
+      y = constrain(y, 60, height * 0.6)
+    } else if (strategy < 0.8) {
+      // 20% - Edge preference for variety
+      if (random() < 0.5) {
+        x = random() < 0.5 ? random(80, 150) : random(width - 150, width - 80)
+        y = random(60, height * 0.5)
+      } else {
+        x = random(80, width - 80)
+        y = random(60, 120)
+      }
+    } else {
+      // 20% - Poisson disk sampling attempt (avoid clusters)
+      let bestX = random(80, width - 80)
+      let bestY = random(60, height * 0.6)
+      let bestMinDist = 0
+      
+      // Try a few positions and pick the one furthest from existing balloons
+      for (let j = 0; j < 5; j++) {
+        let testX = random(80, width - 80)
+        let testY = random(60, height * 0.6)
+        let minDist = Infinity
+        
+        for (let obstacle of obstacles) {
+          if (obstacle.type === 'balloon') {
+            let d = dist(testX, testY, obstacle.x, obstacle.y)
+            minDist = min(minDist, d)
+          }
+        }
+        
+        if (minDist > bestMinDist) {
+          bestMinDist = minDist
+          bestX = testX
+          bestY = testY
         }
       }
-
-      // Check distance from home branch
-      if (valid && window.homeBranch) {
-        let branchY = window.homeBranch.y
-        if (Math.abs(y - branchY) < radius + 40) {
-          valid = false
-        }
-      }
-
-      if (valid) {
-        obstacles.push(new Obstacle(x, y, radius, 'balloon'))
-        placed = true
-      }
-      attempts++
+      
+      x = bestX
+      y = bestY
     }
+
+    let radius = random(35, 50) // Varied sizes for visual interest
+
+    let valid = true
+    // Check distance from other obstacles
+    for (let obstacle of obstacles) {
+      if (
+        dist(x, y, obstacle.x, obstacle.y) <
+        radius + obstacle.radius + 40
+      ) {
+        valid = false
+        break
+      }
+    }
+
+    // Check distance from home branch
+    if (valid && window.homeBranch) {
+      let branchY = window.homeBranch.y
+      if (Math.abs(y - branchY) < radius + 40) {
+        valid = false
+      }
+    }
+
+    if (valid) {
+      obstacles.push(new Obstacle(x, y, radius, 'balloon'))
+      placed = true
+    }
+    attempts++
   }
+}
 
   // Create beetles
   let numBeetles = Math.floor(random(9, 15))
@@ -1599,7 +1651,9 @@ function saveGame () {
     upgrades: upgrades,
     playerPoints: playerPoints,
     nightsSurvived: nightsSurvived,
-    currentNight: currentNight
+    currentNight: currentNight,
+    playerPoints: playerPoints,
+    spentPoints: spentPoints,
   }
 
   localStorage.setItem('cobGameSave', JSON.stringify(saveData))
@@ -1617,6 +1671,8 @@ function loadGame () {
     playerPoints = data.playerPoints || 0
     nightsSurvived = data.nightsSurvived || 0
     currentNight = data.currentNight || 1
+    playerPoints = data.playerPoints || 0
+    spentPoints = data.spentPoints || 0
 
     // Apply upgrades
     applyUpgradeEffects()
@@ -1742,11 +1798,11 @@ function openUpgradeShop () {
   noLoop() // Pause the game
 
   // Calculate points from flies caught this session
-  playerPoints = totalFliesCaught
+  // playerPoints = totalFliesCaught
 
   // Update shop UI
   document.getElementById('upgrade-shop').style.display = 'block'
-  document.getElementById('available-points').textContent = playerPoints
+  document.getElementById('available-points').textContent = playerPoints - spentPoints
 
   // Populate upgrade lists
   updateShopDisplay()
@@ -1773,6 +1829,9 @@ function updateShopDisplay () {
   let tier2HTML = ''
   let tier1Count = 0
 
+  // Calculate available points
+  let availablePoints = playerPoints - spentPoints
+
   // Count tier 1 upgrades
   for (let key in upgrades) {
     if (upgrades[key].tier === 1 && upgrades[key].level > 0) {
@@ -1784,7 +1843,7 @@ function updateShopDisplay () {
   for (let key in upgrades) {
     let upgrade = upgrades[key]
     if (upgrade.tier === 1) {
-      let canAfford = playerPoints >= upgrade.cost
+      let canAfford = availablePoints >= upgrade.cost
       let maxed = upgrade.level >= upgrade.maxLevel
       let buttonText = maxed ? 'MAXED' : `Buy (${upgrade.cost} pts)`
       let buttonDisabled = maxed || !canAfford ? 'disabled' : ''
@@ -1825,7 +1884,7 @@ function updateShopDisplay () {
     let upgrade = upgrades[key]
     if (upgrade.tier === 2) {
       let unlocked = tier1Count >= upgrade.requires
-      let canAfford = playerPoints >= upgrade.cost && unlocked
+      let canAfford = availablePoints >= upgrade.cost && unlocked
       let maxed = upgrade.level >= upgrade.maxLevel
       let buttonText = maxed
         ? 'MAXED'
@@ -1890,15 +1949,16 @@ window.buyUpgrade = function (upgradeKey) {
   }
 
   // Check if can afford and not maxed
-  if (playerPoints >= upgrade.cost && upgrade.level < upgrade.maxLevel) {
-    playerPoints -= upgrade.cost
+  let availablePoints = playerPoints - spentPoints  // Calculate available points
+  if (availablePoints >= upgrade.cost && upgrade.level < upgrade.maxLevel) {
+    spentPoints += upgrade.cost  // Track spent points
     upgrade.level++
 
     // Apply upgrade effects immediately
     applyUpgradeEffects()
 
-    // Update display
-    document.getElementById('available-points').textContent = playerPoints
+    // Update display with available points
+    document.getElementById('available-points').textContent = playerPoints - spentPoints
     updateShopDisplay()
 
     // Show notification

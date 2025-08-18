@@ -34,7 +34,6 @@ class Spider {
         return
       }
       jumpStamina -= jumpCost
-      stats.totalJumps++
       // Delay stamina regen after each jump during DAWN
       staminaRegenCooldown = 60 // 1s at 60fps
     }
@@ -67,6 +66,10 @@ class Spider {
     this.vel = direction
     this.isAirborne = true
     this.canJump = false
+    // Count every successful jump (lifetime stat)
+    if (typeof stats !== 'undefined') {
+      stats.totalJumps++
+    }
 
     // FIX: Ensure lastAnchorPoint is set to edge, not center
     if (!this.lastAnchorPoint) {
@@ -139,7 +142,7 @@ class Spider {
         if (fly.type === 'queen') munchPoints = 10
         if (fly.type === 'moth') munchPoints = 6
         playerPoints += munchPoints
-        totalFliesCaught++ // Add to lifetime counter
+        // totalFliesCaught++ // Add to lifetime counter
 
         webSilk = min(webSilk + 15, maxWebSilk)
 
@@ -284,8 +287,8 @@ class Spider {
 
         // The branch is drawn centered at branch.y; compute top/bottom with rotation
         let rotationOffset = this.pos.x * branch.angle
-        let branchTopY = (branch.y - visualThickness) + rotationOffset
-        let branchBottomY = (branch.y + visualThickness) + rotationOffset
+        let branchTopY = branch.y - visualThickness + rotationOffset
+        let branchBottomY = branch.y + visualThickness + rotationOffset
 
         // Check collision
         let prevY = this.pos.y - this.vel.y
@@ -605,7 +608,8 @@ class Spider {
 }
 
 class Fly {
-  constructor () {
+  constructor (type = 'regular') {
+    this.type = type
     if (random() < 0.5) {
       this.pos = createVector(
         random() < 0.5 ? -20 : width + 20,
@@ -641,6 +645,14 @@ class Fly {
         this.stuck = true
         fliesCaught++
         totalFliesCaught++ // Add to lifetime counter
+
+        if (typeof stats !== 'undefined') {
+          stats.totalFliesCaught++
+          if (this.type === 'golden') stats.goldenCaught++
+          else if (this.type === 'queen') stats.queensCaught++
+          else if (this.type === 'moth') stats.mothsCaught++
+          else stats.regularCaught++
+        }
 
         // POINTS: Award points for catching fly
         let catchPoints = 2 // Base points for catch
