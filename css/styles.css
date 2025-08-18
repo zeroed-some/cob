@@ -84,3 +84,22 @@ canvas {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
 }
 
+  /* Make buttons touch-friendly */
+  #upgrade-shop button,
+  #stats-panel button,
+  #game-over-screen button {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    cursor: pointer;
+  }
+  
+  /* Prevent scroll/zoom issues on mobile */
+  #upgrade-shop,
+  #stats-panel {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }

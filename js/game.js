@@ -70,7 +70,7 @@ let isExhausted = false
 let fliesMunchedLastNight = 0
 let birds = []
 let staminaRegenCooldown = 0
-let staminaBonus = 0;
+let staminaBonus = 0
 
 // PHASE 4B: Wind System
 let windActive = false
@@ -477,99 +477,99 @@ function setup () {
   let numObstacles = Math.floor((width * height) / 60000) // More obstacles
   numObstacles = constrain(numObstacles, 15, 25)
 
-// Create ant balloons
-let numBalloons = Math.floor(random(15, 21))
-for (let i = 0; i < numBalloons; i++) {
-  let attempts = 0
-  let placed = false
+  // Create ant balloons
+  let numBalloons = Math.floor(random(15, 21))
+  for (let i = 0; i < numBalloons; i++) {
+    let attempts = 0
+    let placed = false
 
-  while (!placed && attempts < 30) {
-    // FIX: True random distribution with better spread
-    let x, y
-    
-    // Use different strategies for better distribution
-    let strategy = random()
-    
-    if (strategy < 0.3) {
-      // 30% - Truly random across upper area
-      x = random(80, width - 80)
-      y = random(60, height * 0.5)
-    } else if (strategy < 0.6) {
-      // 30% - Radial distribution from center
-      let angle = random(TWO_PI)
-      let radius = random(100, min(width, height) * 0.35)
-      x = width / 2 + cos(angle) * radius
-      y = height * 0.35 + sin(angle) * radius * 0.7  // Elliptical, flatter
-      x = constrain(x, 80, width - 80)
-      y = constrain(y, 60, height * 0.6)
-    } else if (strategy < 0.8) {
-      // 20% - Edge preference for variety
-      if (random() < 0.5) {
-        x = random() < 0.5 ? random(80, 150) : random(width - 150, width - 80)
-        y = random(60, height * 0.5)
-      } else {
+    while (!placed && attempts < 30) {
+      // FIX: True random distribution with better spread
+      let x, y
+
+      // Use different strategies for better distribution
+      let strategy = random()
+
+      if (strategy < 0.3) {
+        // 30% - Truly random across upper area
         x = random(80, width - 80)
-        y = random(60, 120)
-      }
-    } else {
-      // 20% - Poisson disk sampling attempt (avoid clusters)
-      let bestX = random(80, width - 80)
-      let bestY = random(60, height * 0.6)
-      let bestMinDist = 0
-      
-      // Try a few positions and pick the one furthest from existing balloons
-      for (let j = 0; j < 5; j++) {
-        let testX = random(80, width - 80)
-        let testY = random(60, height * 0.6)
-        let minDist = Infinity
-        
-        for (let obstacle of obstacles) {
-          if (obstacle.type === 'balloon') {
-            let d = dist(testX, testY, obstacle.x, obstacle.y)
-            minDist = min(minDist, d)
+        y = random(60, height * 0.5)
+      } else if (strategy < 0.6) {
+        // 30% - Radial distribution from center
+        let angle = random(TWO_PI)
+        let radius = random(100, min(width, height) * 0.35)
+        x = width / 2 + cos(angle) * radius
+        y = height * 0.35 + sin(angle) * radius * 0.7 // Elliptical, flatter
+        x = constrain(x, 80, width - 80)
+        y = constrain(y, 60, height * 0.6)
+      } else if (strategy < 0.8) {
+        // 20% - Edge preference for variety
+        if (random() < 0.5) {
+          x = random() < 0.5 ? random(80, 150) : random(width - 150, width - 80)
+          y = random(60, height * 0.5)
+        } else {
+          x = random(80, width - 80)
+          y = random(60, 120)
+        }
+      } else {
+        // 20% - Poisson disk sampling attempt (avoid clusters)
+        let bestX = random(80, width - 80)
+        let bestY = random(60, height * 0.6)
+        let bestMinDist = 0
+
+        // Try a few positions and pick the one furthest from existing balloons
+        for (let j = 0; j < 5; j++) {
+          let testX = random(80, width - 80)
+          let testY = random(60, height * 0.6)
+          let minDist = Infinity
+
+          for (let obstacle of obstacles) {
+            if (obstacle.type === 'balloon') {
+              let d = dist(testX, testY, obstacle.x, obstacle.y)
+              minDist = min(minDist, d)
+            }
+          }
+
+          if (minDist > bestMinDist) {
+            bestMinDist = minDist
+            bestX = testX
+            bestY = testY
           }
         }
-        
-        if (minDist > bestMinDist) {
-          bestMinDist = minDist
-          bestX = testX
-          bestY = testY
+
+        x = bestX
+        y = bestY
+      }
+
+      let radius = random(35, 50) // Varied sizes for visual interest
+
+      let valid = true
+      // Check distance from other obstacles
+      for (let obstacle of obstacles) {
+        if (
+          dist(x, y, obstacle.x, obstacle.y) <
+          radius + obstacle.radius + 40
+        ) {
+          valid = false
+          break
         }
       }
-      
-      x = bestX
-      y = bestY
-    }
 
-    let radius = random(35, 50) // Varied sizes for visual interest
-
-    let valid = true
-    // Check distance from other obstacles
-    for (let obstacle of obstacles) {
-      if (
-        dist(x, y, obstacle.x, obstacle.y) <
-        radius + obstacle.radius + 40
-      ) {
-        valid = false
-        break
+      // Check distance from home branch
+      if (valid && window.homeBranch) {
+        let branchY = window.homeBranch.y
+        if (Math.abs(y - branchY) < radius + 40) {
+          valid = false
+        }
       }
-    }
 
-    // Check distance from home branch
-    if (valid && window.homeBranch) {
-      let branchY = window.homeBranch.y
-      if (Math.abs(y - branchY) < radius + 40) {
-        valid = false
+      if (valid) {
+        obstacles.push(new Obstacle(x, y, radius, 'balloon'))
+        placed = true
       }
+      attempts++
     }
-
-    if (valid) {
-      obstacles.push(new Obstacle(x, y, radius, 'balloon'))
-      placed = true
-    }
-    attempts++
   }
-}
 
   // Create beetles
   let numBeetles = Math.floor(random(9, 15))
@@ -1411,20 +1411,39 @@ function openStatsPanel () {
   // Show panel
   document.getElementById('stats-panel').style.display = 'block'
 
-  // Add close button listener
-  document.getElementById('close-stats-btn').onclick = () => {
-    document.getElementById('stats-panel').style.display = 'none'
+  // FIX: Add both click AND touch listeners
+  let closeBtn = document.getElementById('close-stats-btn')
 
-    // IMMEDIATELY transition to dusk after closing stats
+  // Remove any existing listeners
+  closeBtn.replaceWith(closeBtn.cloneNode(true))
+  closeBtn = document.getElementById('close-stats-btn')
+
+  closeBtn.addEventListener('click', function () {
+    document.getElementById('stats-panel').style.display = 'none'
     if (gamePhase === 'DAY') {
       gamePhase = 'DAY_TO_DUSK'
       phaseTimer = 0
     }
-  }
+  })
+
+  closeBtn.addEventListener('touchend', function (e) {
+    e.preventDefault()
+    document.getElementById('stats-panel').style.display = 'none'
+    if (gamePhase === 'DAY') {
+      gamePhase = 'DAY_TO_DUSK'
+      phaseTimer = 0
+    }
+  })
 }
 
 // Make selectSkin global
-window.selectSkin = function (skinId) {
+window.selectSkin = function (skinId, event) {
+  // Prevent touch issues
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   if (unlockedSkins[skinId]) {
     currentSkin = skinId
     saveGame()
@@ -1653,7 +1672,7 @@ function saveGame () {
     nightsSurvived: nightsSurvived,
     currentNight: currentNight,
     playerPoints: playerPoints,
-    spentPoints: spentPoints,
+    spentPoints: spentPoints
   }
 
   localStorage.setItem('cobGameSave', JSON.stringify(saveData))
@@ -1792,23 +1811,32 @@ function spawnDawnBirds () {
 // ============================================
 
 function openUpgradeShop () {
-  if (currentNight <= 1) return // No shop on first night
+  if (currentNight <= 1) return
 
   shopOpen = true
   noLoop() // Pause the game
 
-  // Calculate points from flies caught this session
-  // playerPoints = totalFliesCaught
-
   // Update shop UI
   document.getElementById('upgrade-shop').style.display = 'block'
-  document.getElementById('available-points').textContent = playerPoints - spentPoints
+  document.getElementById('available-points').textContent =
+    playerPoints - spentPoints
 
   // Populate upgrade lists
   updateShopDisplay()
 
-  // Add continue button listener
-  document.getElementById('continue-btn').onclick = closeUpgradeShop
+  // FIX: Add both click AND touch listeners for mobile
+  let continueBtn = document.getElementById('continue-btn')
+
+  // Remove any existing listeners to prevent duplicates
+  continueBtn.replaceWith(continueBtn.cloneNode(true))
+  continueBtn = document.getElementById('continue-btn')
+
+  // Add both click and touch support
+  continueBtn.addEventListener('click', closeUpgradeShop)
+  continueBtn.addEventListener('touchend', function (e) {
+    e.preventDefault() // Prevent ghost clicks
+    closeUpgradeShop()
+  })
 }
 
 function closeUpgradeShop () {
@@ -1862,7 +1890,7 @@ function updateShopDisplay () {
       }/${upgrade.maxLevel})
                             <br><small>${upgrade.description}</small>
                         </div>
-                        <button onclick="buyUpgrade('${key}')" ${buttonDisabled}
+                        <button ontouchend="buyUpgrade('${key}')" onclick="buyUpgrade('${key}')" ${buttonDisabled}
                                 style="padding: 5px 15px; background: ${
                                   canAfford && !maxed ? '#4CAF50' : '#666'
                                 }; 
@@ -1907,7 +1935,7 @@ function updateShopDisplay () {
       }/${upgrade.maxLevel})
                             <br><small>${upgrade.description}</small>
                         </div>
-                        <button onclick="buyUpgrade('${key}')" ${buttonDisabled}
+                        <button ontouchend="buyUpgrade('${key}')" onclick="buyUpgrade('${key}')" ${buttonDisabled}
                                 style="padding: 5px 15px; background: ${
                                   canAfford && !maxed ? '#FF69B4' : '#666'
                                 }; 
@@ -1934,6 +1962,12 @@ function updateShopDisplay () {
 
 // Make buyUpgrade global so onclick can access it
 window.buyUpgrade = function (upgradeKey) {
+  // Prevent any touch/click propagation issues
+  if (event) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   let upgrade = upgrades[upgradeKey]
   if (!upgrade) return
 
@@ -1949,16 +1983,17 @@ window.buyUpgrade = function (upgradeKey) {
   }
 
   // Check if can afford and not maxed
-  let availablePoints = playerPoints - spentPoints  // Calculate available points
+  let availablePoints = playerPoints - spentPoints // Calculate available points
   if (availablePoints >= upgrade.cost && upgrade.level < upgrade.maxLevel) {
-    spentPoints += upgrade.cost  // Track spent points
+    spentPoints += upgrade.cost // Track spent points
     upgrade.level++
 
     // Apply upgrade effects immediately
     applyUpgradeEffects()
 
     // Update display with available points
-    document.getElementById('available-points').textContent = playerPoints - spentPoints
+    document.getElementById('available-points').textContent =
+      playerPoints - spentPoints
     updateShopDisplay()
 
     // Show notification
@@ -2709,39 +2744,48 @@ function updateUI () {
     `<br><small ${staminaColor}>Dawn Stamina: ${potentialStamina}</small>`
 
   if (gamePhase === 'NIGHT') {
-  let timeLeft = Math.ceil((NIGHT_DURATION - phaseTimer) / 60);
-  
-  // Calculate current munch percentage
-  let totalFliesInNight = fliesSpawnedThisNight + flies.length;
-  let currentMunchPercent = totalFliesInNight > 0 ? 
-    Math.floor((fliesMunched / totalFliesInNight) * 100) : 0;
-  
-  // Calculate predicted dawn stamina
-  let predictedStamina;
-  if (currentMunchPercent >= 50) {
-    predictedStamina = 100;
-  } else {
-    predictedStamina = Math.floor(20 + (currentMunchPercent * 2) * 0.8);
-  }
-  
-  timerText = `${timeLeft}s • ${flies.length} flies`;
-  
-  // Show special fly counts if any
-  let goldenCount = flies.filter(f => f.type === 'golden').length;
-  let mothCount = flies.filter(f => f.type === 'moth').length;
-  let queenCount = flies.filter(f => f.type === 'queen').length;
-  
-  if (goldenCount > 0 || mothCount > 0 || queenCount > 0) {
-    let specialCounts = [];
-    if (queenCount > 0) specialCounts.push(`${queenCount}👑`);
-    if (goldenCount > 0) specialCounts.push(`${goldenCount}✨`);
-    if (mothCount > 0) specialCounts.push(`${mothCount}🦋`);
-    timerText += ` (${specialCounts.join(' ')})`;
-  }
-   // Show munch progress
-  document.getElementById('timer').innerHTML = timerText + 
-    `<br><small style="color: ${predictedStamina < 40 ? '#ff4444' : predictedStamina < 70 ? '#ffaa44' : '#44ff44'}">` +
-    `Munched: ${currentMunchPercent}% → ${predictedStamina} dawn stamina</small>`;
+    let timeLeft = Math.ceil((NIGHT_DURATION - phaseTimer) / 60)
+
+    // Calculate current munch percentage
+    let totalFliesInNight = fliesSpawnedThisNight + flies.length
+    let currentMunchPercent =
+      totalFliesInNight > 0
+        ? Math.floor((fliesMunched / totalFliesInNight) * 100)
+        : 0
+
+    // Calculate predicted dawn stamina
+    let predictedStamina
+    if (currentMunchPercent >= 50) {
+      predictedStamina = 100
+    } else {
+      predictedStamina = Math.floor(20 + currentMunchPercent * 2 * 0.8)
+    }
+
+    timerText = `${timeLeft}s • ${flies.length} flies`
+
+    // Show special fly counts if any
+    let goldenCount = flies.filter(f => f.type === 'golden').length
+    let mothCount = flies.filter(f => f.type === 'moth').length
+    let queenCount = flies.filter(f => f.type === 'queen').length
+
+    if (goldenCount > 0 || mothCount > 0 || queenCount > 0) {
+      let specialCounts = []
+      if (queenCount > 0) specialCounts.push(`${queenCount}👑`)
+      if (goldenCount > 0) specialCounts.push(`${goldenCount}✨`)
+      if (mothCount > 0) specialCounts.push(`${mothCount}🦋`)
+      timerText += ` (${specialCounts.join(' ')})`
+    }
+    // Show munch progress
+    document.getElementById('timer').innerHTML =
+      timerText +
+      `<br><small style="color: ${
+        predictedStamina < 40
+          ? '#ff4444'
+          : predictedStamina < 70
+          ? '#ffaa44'
+          : '#44ff44'
+      }">` +
+      `Munched: ${currentMunchPercent}% → ${predictedStamina} dawn stamina</small>`
   } else if (gamePhase === 'DAWN') {
     let timeLeft = Math.ceil((DAWN_DURATION - phaseTimer) / 60)
     // PHASE 4: Show birds and exhaustion status
@@ -2786,49 +2830,56 @@ function updateUI () {
   }
 
   // PHASE 4: Update meter based on phase
-if (gamePhase === 'DAWN') {
-  // Show stamina instead of silk during dawn
-  document.getElementById('web-meter-label').textContent = 'STAMINA';
-  
-  // FIX: Always show percentage out of 100, not out of variable max
-  let staminaPercent = (jumpStamina / 100) * 100; // Always out of 100
-  document.getElementById('web-meter-fill').style.width = staminaPercent + '%';
+  if (gamePhase === 'DAWN') {
+    // Show stamina instead of silk during dawn
+    document.getElementById('web-meter-label').textContent = 'STAMINA'
 
-  // Color based on stamina level
-  if (jumpStamina < 20) {
-    // Exhausted - red flash
-    let flash = sin(frameCount * 0.3) * 0.5 + 0.5;
-    document.getElementById('web-meter-fill').style.background = 
-      `linear-gradient(90deg, rgb(255, ${50 + flash * 50}, ${50 + flash * 50}), rgb(200, ${30 + flash * 30}, ${30 + flash * 30}))`;
-  } else if (jumpStamina < 40) {
-    // Very tired - orange-red
-    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FF6B35, #FF4444)';
-  } else if (jumpStamina < 60) {
-    // Tired - orange
-    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FFA500, #FF8C00)';
-  } else if (jumpStamina < 80) {
-    // OK - yellow-orange
-    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FFD700, #FFA500)';
+    // FIX: Always show percentage out of 100, not out of variable max
+    let staminaPercent = (jumpStamina / 100) * 100 // Always out of 100
+    document.getElementById('web-meter-fill').style.width = staminaPercent + '%'
+
+    // Color based on stamina level
+    if (jumpStamina < 20) {
+      // Exhausted - red flash
+      let flash = sin(frameCount * 0.3) * 0.5 + 0.5
+      document.getElementById(
+        'web-meter-fill'
+      ).style.background = `linear-gradient(90deg, rgb(255, ${
+        50 + flash * 50
+      }, ${50 + flash * 50}), rgb(200, ${30 + flash * 30}, ${30 + flash * 30}))`
+    } else if (jumpStamina < 40) {
+      // Very tired - orange-red
+      document.getElementById('web-meter-fill').style.background =
+        'linear-gradient(90deg, #FF6B35, #FF4444)'
+    } else if (jumpStamina < 60) {
+      // Tired - orange
+      document.getElementById('web-meter-fill').style.background =
+        'linear-gradient(90deg, #FFA500, #FF8C00)'
+    } else if (jumpStamina < 80) {
+      // OK - yellow-orange
+      document.getElementById('web-meter-fill').style.background =
+        'linear-gradient(90deg, #FFD700, #FFA500)'
+    } else {
+      // Good stamina - green-yellow
+      document.getElementById('web-meter-fill').style.background =
+        'linear-gradient(90deg, #90EE90, #FFD700)'
+    }
+
+    // Show critical warning overlay
+    if (jumpStamina <= 0 && !gameOver) {
+      push()
+      fill(255, 0, 0, 50 + sin(frameCount * 0.3) * 50)
+      rect(0, 0, width, height)
+
+      textAlign(CENTER)
+      textSize(32)
+      fill(255, 50, 50)
+      stroke(0)
+      strokeWeight(3)
+      text('NO STAMINA - AVOID BIRDS!', width / 2, height / 2)
+      pop()
+    }
   } else {
-    // Good stamina - green-yellow
-    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #90EE90, #FFD700)';
-  }
-  
-  // Show critical warning overlay
-  if (jumpStamina <= 0 && !gameOver) {
-    push();
-    fill(255, 0, 0, 50 + sin(frameCount * 0.3) * 50);
-    rect(0, 0, width, height);
-
-    textAlign(CENTER);
-    textSize(32);
-    fill(255, 50, 50);
-    stroke(0);
-    strokeWeight(3);
-    text('NO STAMINA - AVOID BIRDS!', width / 2, height / 2);
-    pop();
-  }
-} else {
     // Normal silk meter
     document.getElementById('web-meter-label').textContent = 'SILK'
     let meterPercent = (webSilk / maxWebSilk) * 100
@@ -2918,6 +2969,13 @@ function showGameOverScreen () {
     `
 
   document.body.insertAdjacentHTML('beforeend', gameOverHTML)
+  // FIX: Add touch support to restart button
+  let restartBtn = document.getElementById('restart-btn')
+  restartBtn.addEventListener('click', restartGame)
+  restartBtn.addEventListener('touchend', function (e) {
+    e.preventDefault()
+    restartGame()
+  })
 }
 
 // Add restart game function:
@@ -3125,6 +3183,14 @@ function recycleNearbyWeb () {
 }
 
 function touchStarted () {
+  // FIX: Don't process game touches when modals are open
+  if (
+    shopOpen ||
+    document.getElementById('stats-panel').style.display === 'block'
+  ) {
+    return false
+  }
+
   if (touches.length > 0) {
     touchStartTime = millis()
     touchStartX = touches[0].x
@@ -3188,6 +3254,12 @@ function touchStarted () {
 }
 
 function touchMoved () {
+  if (
+    shopOpen ||
+    document.getElementById('stats-panel').style.display === 'block'
+  ) {
+    return false
+  }
   // Update web deployment target while holding
   if (
     touchHolding &&
@@ -3206,6 +3278,12 @@ function touchMoved () {
 }
 
 function touchEnded () {
+  if (
+    shopOpen ||
+    document.getElementById('stats-panel').style.display === 'block'
+  ) {
+    return false
+  }
   touchHolding = false
   touchProcessing = false
 
