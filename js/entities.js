@@ -22,16 +22,21 @@ class Spider {
 
     // DAWN PHASE: Check and consume stamina
     if (gamePhase === 'DAWN') {
+      // FIX: Only check if we ACTUALLY don't have enough stamina
       if (jumpStamina < jumpCost) {
         isExhausted = true
+        // Only show notification if we're truly out
+        if (jumpStamina < 5 && notifications.length < 3) {
+          notifications.push(
+            new Notification('NO STAMINA!', color(255, 50, 50))
+          )
+        }
         return
       }
       jumpStamina -= jumpCost
       stats.totalJumps++
       // Delay stamina regen after each jump during DAWN
-      if (gamePhase === 'DAWN') {
-        staminaRegenCooldown = 60 // 1s at 60fps
-      }
+      staminaRegenCooldown = 60 // 1s at 60fps
     }
 
     // PHASE 4B: Track wind jumps
@@ -119,14 +124,56 @@ class Spider {
     if (this.munchCooldown > 0) return
 
     isMunching = true
-    this.munchCooldown = 30
+    this.munchCooldown = this.munchCooldownMax || 30 // Use upgrade value if available
 
     for (let i = flies.length - 1; i >= 0; i--) {
       let fly = flies[i]
       let d = dist(this.pos.x, this.pos.y, fly.pos.x, fly.pos.y)
       if (d < this.munchRadius) {
         fliesMunched++
+        stats.fliesMunchedInCurrentNight++ // Track for achievements
+
+        // POINTS: Award points for munching
+        let munchPoints = 4 // Base points for munch
+        if (fly.type === 'golden') munchPoints = 8
+        if (fly.type === 'queen') munchPoints = 10
+        if (fly.type === 'moth') munchPoints = 6
+        playerPoints += munchPoints
+        totalFliesCaught++ // Add to lifetime counter
+
         webSilk = min(webSilk + 15, maxWebSilk)
+
+        // PHASE 3: Metabolize upgrade effect
+        if (upgrades.metabolize && upgrades.metabolize.level > 0) {
+          // Heal nearby broken strands
+          for (let strand of webStrands) {
+            if (strand.broken) {
+              let distToStrand = Infinity
+              if (strand.path && strand.path.length > 0) {
+                for (let point of strand.path) {
+                  let d = dist(this.pos.x, this.pos.y, point.x, point.y)
+                  if (d < distToStrand) distToStrand = d
+                }
+              }
+
+              if (distToStrand < 100) {
+                strand.broken = false
+                strand.strength = 0.5 // Heal to half strength
+
+                // Green healing particles
+                for (let j = 0; j < 5; j++) {
+                  let p = new Particle(this.pos.x, this.pos.y)
+                  p.color = color(100, 255, 100)
+                  p.vel = createVector(random(-2, 2), random(-2, 2))
+                  p.size = 3
+                  particles.push(p)
+                }
+
+                break // Only heal one strand per munch
+              }
+            }
+          }
+        }
 
         for (let j = 0; j < 12; j++) {
           let p = new Particle(fly.pos.x, fly.pos.y)
@@ -202,34 +249,62 @@ class Spider {
       let branchStart = Math.min(branch.startX, branch.endX)
       let branchEnd = Math.max(branch.startX, branch.endX)
 
-      // Since the branch angle is very small (0.05 radians ≈ 3 degrees),
-      // we can use a simpler approximation
-      if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
+      // FIX: Extend collision detection beyond visual tip
+      // The visual branch ends at branchEnd, but we need collision slightly beyond
+      let collisionPadding = 15 // Extra collision at the tip
+
+      if (
+        this.pos.x >= branchStart - 10 &&
+        this.pos.x <= branchEnd + collisionPadding
+      ) {
         // Calculate position along branch (0 to 1)
+        // FIX: Clamp t to ensure we handle tip properly
         let t = (this.pos.x - branchStart) / (branchEnd - branchStart)
-        t = constrain(t, 0, 1)
+
+        // Allow t to go slightly beyond 1.0 for tip collision
+        if (this.pos.x > branchEnd) {
+          t = 1.0 // At the tip, use tip thickness
+        } else {
+          t = constrain(t, 0, 1)
+        }
 
         // Branch visual thickness tapers from full at start to 35% at end
-        // This matches exactly how it's drawn in the bezier curves
-        let branchTopThickness = lerp(
-          branch.thickness * 0.9,
-          branch.thickness * 0.35,
-          t
-        )
+        let branchTopThickness
+        if (t >= 1.0) {
+          // At the very tip, maintain minimum collision thickness
+          branchTopThickness = branch.thickness * 0.35
+        } else {
+          branchTopThickness = lerp(
+            branch.thickness * 0.9,
+            branch.thickness * 0.35,
+            t
+          )
+        }
 
         // The branch is drawn centered at branch.y
-        // With small angle approximation: the top of the branch is at
         let branchSurfaceY = branch.y - branchTopThickness
 
-        // Add slight angle correction (for small angles, tan ≈ sin ≈ angle in radians)
-        let angleCorrection = (this.pos.x - branchStart) * branch.angle
+        // FIX: Correct angle calculation based on branch side
+        let angleCorrection
+        if (branch.side === 'right') {
+          // Right branch slopes down to the left (negative angle)
+          // Use distance from the end point (which is on the left for right branches)
+          angleCorrection = -(this.pos.x - branchEnd) * abs(branch.angle)
+        } else {
+          // Left branch slopes down to the right (positive angle)
+          // Use distance from the start point
+          angleCorrection = (this.pos.x - branchStart) * abs(branch.angle)
+        }
         branchSurfaceY += angleCorrection
 
         // Check if spider is crossing the branch from above
         let prevY = this.pos.y - this.vel.y
 
+        // FIX: More generous collision detection at the tip
+        let collisionBuffer = t >= 0.9 ? 5 : 0 // Extra buffer near tip
+
         if (
-          prevY <= branchSurfaceY && // Was above
+          prevY <= branchSurfaceY + collisionBuffer && // Was above (with buffer)
           this.pos.y + this.radius >= branchSurfaceY && // Now at or below
           this.pos.y < branch.y + branch.thickness
         ) {
@@ -350,132 +425,148 @@ class Spider {
     this.land()
   }
 
-land() {
-  this.vel.mult(0);
-  this.isAirborne = false;
-  this.canJump = true;
+  land () {
+    this.vel.mult(0)
+    this.isAirborne = false
+    this.canJump = true
 
-  // FIX: Check if we're actually landing on something valid
-  let landedOnSomething = false;
-  let landingPoint = null; // Store where we're landing for anchor
-  let landingObstacle = null; // NEW: Track which obstacle we're landing on
+    // FIX: Check if we're actually landing on something valid
+    let landedOnSomething = false
+    let landingPoint = null // Store where we're landing for anchor
+    let landingObstacle = null // NEW: Track which obstacle we're landing on
 
-  // Check if on ground
-  if (this.pos.y >= height - this.radius - 5) {
-    landedOnSomething = true;
-    landingPoint = createVector(this.pos.x, height);
-  }
+    // Check if on ground
+    if (this.pos.y >= height - this.radius - 5) {
+      landedOnSomething = true
+      landingPoint = createVector(this.pos.x, height)
+    }
 
-  // Check if on an obstacle
-  if (!landedOnSomething) {
-    for (let obstacle of obstacles) {
-      if (this.checkObstacleCollision(obstacle)) {
-        landedOnSomething = true;
-        landingObstacle = obstacle; // NEW: Store the obstacle
-        // Calculate edge point for anchor
-        let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x);
-        landingPoint = createVector(
-          obstacle.x + cos(angle) * obstacle.radius,
-          obstacle.y + sin(angle) * obstacle.radius
-        );
-        break;
+    // Check if on an obstacle
+    if (!landedOnSomething) {
+      for (let obstacle of obstacles) {
+        if (this.checkObstacleCollision(obstacle)) {
+          landedOnSomething = true
+          landingObstacle = obstacle // NEW: Store the obstacle
+          // Calculate edge point for anchor
+          let angle = atan2(this.pos.y - obstacle.y, this.pos.x - obstacle.x)
+          landingPoint = createVector(
+            obstacle.x + cos(angle) * obstacle.radius,
+            obstacle.y + sin(angle) * obstacle.radius
+          )
+          break
+        }
       }
     }
-  }
 
-  // Check if on a web strand
-  if (!landedOnSomething) {
-    for (let strand of webStrands) {
-      if (strand !== currentStrand && !strand.broken && this.checkStrandCollision(strand)) {
-        landedOnSomething = true;
-        // For web strands, use spider position as anchor
-        landingPoint = this.pos.copy();
-        break;
+    // Check if on a web strand
+    if (!landedOnSomething) {
+      for (let strand of webStrands) {
+        if (
+          strand !== currentStrand &&
+          !strand.broken &&
+          this.checkStrandCollision(strand)
+        ) {
+          landedOnSomething = true
+          // For web strands, use spider position as anchor
+          landingPoint = this.pos.copy()
+          break
+        }
       }
     }
-  }
 
-  // Check if on home branch
-  if (!landedOnSomething && window.homeBranch) {
-    let branch = window.homeBranch;
-    let branchStart = Math.min(branch.startX, branch.endX);
-    let branchEnd = Math.max(branch.startX, branch.endX);
+    // Check if on home branch
+    if (!landedOnSomething && window.homeBranch) {
+      let branch = window.homeBranch
+      let branchStart = Math.min(branch.startX, branch.endX)
+      let branchEnd = Math.max(branch.startX, branch.endX)
 
-    if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
-      let t = (this.pos.x - branchStart) / (branchEnd - branchStart);
-      t = constrain(t, 0, 1);
-      let branchTopThickness = lerp(branch.thickness * 0.9, branch.thickness * 0.35, t);
-      let branchSurfaceY = branch.y - branchTopThickness;
-      let angleCorrection = (this.pos.x - branchStart) * branch.angle;
-      branchSurfaceY += angleCorrection;
+      if (this.pos.x >= branchStart - 10 && this.pos.x <= branchEnd + 10) {
+        let t = (this.pos.x - branchStart) / (branchEnd - branchStart)
+        t = constrain(t, 0, 1)
+        let branchTopThickness = lerp(
+          branch.thickness * 0.9,
+          branch.thickness * 0.35,
+          t
+        )
+        let branchSurfaceY = branch.y - branchTopThickness
+        let angleCorrection = (this.pos.x - branchStart) * branch.angle
+        branchSurfaceY += angleCorrection
 
-      if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
-        landedOnSomething = true;
-        landingPoint = createVector(this.pos.x, branchSurfaceY);
+        if (abs(this.pos.y - branchSurfaceY) < this.radius + 10) {
+          landedOnSomething = true
+          landingPoint = createVector(this.pos.x, branchSurfaceY)
+        }
       }
     }
-  }
 
-  // FIX: If we're deploying web but didn't land on anything valid, destroy the web
-  if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
-    if (landedOnSomething && landingPoint) {
-      // Valid landing - finalize the web at the landing point
-      currentStrand.end = landingPoint.copy(); // Use edge point, not spider center
-      
-      // NEW: Track obstacle attachment for the end point
-      if (landingObstacle) {
-        currentStrand.endObstacle = landingObstacle;
-        currentStrand.endAngle = atan2(
-          landingPoint.y - landingObstacle.y,
-          landingPoint.x - landingObstacle.x
-        );
-      }
-      
-      if (!currentStrand.path || currentStrand.path.length === 0) {
-        currentStrand.path = [landingPoint.copy()];
+    // FIX: If we're deploying web but didn't land on anything valid, destroy the web
+    if (currentStrand && isDeployingWeb && (spacePressed || touchHolding)) {
+      if (landedOnSomething && landingPoint) {
+        // Valid landing - finalize the web at the landing point
+        currentStrand.end = landingPoint.copy() // Use edge point, not spider center
+
+        // POINTS: Award 1 point for successful web strand
+        playerPoints += 1
+        stats.strandsCreated++ // Track for stats
+
+        // NEW: Track obstacle attachment for the end point
+        if (landingObstacle) {
+          currentStrand.endObstacle = landingObstacle
+          currentStrand.endAngle = atan2(
+            landingPoint.y - landingObstacle.y,
+            landingPoint.x - landingObstacle.x
+          )
+        }
+
+        if (!currentStrand.path || currentStrand.path.length === 0) {
+          currentStrand.path = [landingPoint.copy()]
+        } else {
+          currentStrand.path.push(landingPoint.copy())
+        }
+
+        let newNode = new WebNode(landingPoint.x, landingPoint.y)
+        // NEW: Track node attachment
+        if (landingObstacle) {
+          newNode.attachedObstacle = landingObstacle
+          newNode.attachmentAngle = currentStrand.endAngle
+        }
+        webNodes.push(newNode)
+
+        // Update last anchor for next web
+        this.lastAnchorPoint = landingPoint.copy()
       } else {
-        currentStrand.path.push(landingPoint.copy());
-      }
-      
-      let newNode = new WebNode(landingPoint.x, landingPoint.y);
-      // NEW: Track node attachment
-      if (landingObstacle) {
-        newNode.attachedObstacle = landingObstacle;
-        newNode.attachmentAngle = currentStrand.endAngle;
-      }
-      webNodes.push(newNode);
+        // Invalid landing in mid-air - destroy the web!
+        if (
+          webStrands.length > 0 &&
+          webStrands[webStrands.length - 1] === currentStrand
+        ) {
+          webStrands.pop() // Remove the invalid strand
 
-      // Update last anchor for next web
-      this.lastAnchorPoint = landingPoint.copy();
-    } else {
-      // Invalid landing in mid-air - destroy the web!
-      if (webStrands.length > 0 && webStrands[webStrands.length - 1] === currentStrand) {
-        webStrands.pop(); // Remove the invalid strand
+          // Create poof particles
+          for (let i = 0; i < 8; i++) {
+            let p = new Particle(this.pos.x, this.pos.y)
+            p.color = color(255, 255, 255, 150)
+            p.vel = createVector(random(-3, 3), random(-3, 3))
+            p.size = 4
+            particles.push(p)
+          }
 
-        // Create poof particles
-        for (let i = 0; i < 8; i++) {
-          let p = new Particle(this.pos.x, this.pos.y);
-          p.color = color(255, 255, 255, 150);
-          p.vel = createVector(random(-3, 3), random(-3, 3));
-          p.size = 4;
-          particles.push(p);
-        }
-
-        // Notification
-        if (notifications.length < 3) {
-          notifications.push(new Notification("Web needs anchor point!", color(255, 150, 150)));
+          // Notification
+          if (notifications.length < 3) {
+            notifications.push(
+              new Notification('Web needs anchor point!', color(255, 150, 150))
+            )
+          }
         }
       }
+    } else if (landedOnSomething && landingPoint) {
+      // Update last anchor point even when not deploying web
+      this.lastAnchorPoint = landingPoint.copy()
     }
-  } else if (landedOnSomething && landingPoint) {
-    // Update last anchor point even when not deploying web
-    this.lastAnchorPoint = landingPoint.copy();
+
+    currentStrand = null
+    isDeployingWeb = false
   }
-
-  currentStrand = null;
-  isDeployingWeb = false;
-}
-
 
   display () {
     push()
@@ -552,7 +643,6 @@ class Fly {
 
   update () {
     if (this.stuck) {
-      // If stuck, check if we need to move with a drifting web
       this.updatePositionOnWeb()
       return
     }
@@ -562,9 +652,17 @@ class Fly {
       if (this.vel.mag() < 0.1) {
         this.stuck = true
         fliesCaught++
+        totalFliesCaught++ // Add to lifetime counter
+
+        // POINTS: Award points for catching fly
+        let catchPoints = 2 // Base points for catch
+        if (this.type === 'golden') catchPoints = 4
+        if (this.type === 'queen') catchPoints = 5
+        if (this.type === 'moth') catchPoints = 3
+        playerPoints += catchPoints
+
         webSilk = min(webSilk + 5, maxWebSilk)
       }
-      // While caught but not yet stuck, also follow the web
       this.updatePositionOnWeb()
       return
     }
@@ -759,7 +857,29 @@ class Fly {
       ellipse(0, 0, 20)
     }
 
-    if (gamePhase === 'NIGHT') {
+    // ENHANCED: Special golden fly glow
+    if (this.type === 'golden') {
+      // Multiple layers of golden glow for visibility
+      noStroke()
+      // Outermost glow - very faint but wide
+      fill(255, 215, 0, 15)
+      ellipse(0, 0, 80)
+      // Mid glow
+      fill(255, 200, 0, 25)
+      ellipse(0, 0, 60)
+      // Inner glow
+      fill(255, 185, 0, 40)
+      ellipse(0, 0, 40)
+      // Core glow
+      fill(255, 170, 0, 60)
+      ellipse(0, 0, 25)
+
+      // Pulsing effect
+      let pulse = sin(frameCount * 0.1) * 0.3 + 0.7
+      fill(255, 215, 0, 80 * pulse)
+      ellipse(0, 0, 20)
+    } else if (gamePhase === 'NIGHT') {
+      // Regular firefly glow
       noStroke()
       fill(255, 255, 150, this.glowIntensity * 0.3)
       ellipse(0, 0, 30)
@@ -767,8 +887,21 @@ class Fly {
       ellipse(0, 0, 20)
     }
 
-    fill(30)
-    stroke(0)
+    // Body color based on type
+    if (this.type === 'golden') {
+      fill(255, 215, 0) // Gold body
+      stroke(200, 150, 0)
+    } else if (this.type === 'moth') {
+      fill(60, 40, 30) // Brown moth
+      stroke(40, 20, 10)
+    } else if (this.type === 'queen') {
+      fill(150, 50, 200) // Purple queen
+      stroke(100, 0, 150)
+    } else {
+      fill(30) // Regular black
+      stroke(0)
+    }
+
     strokeWeight(0.5)
     ellipse(0, 0, this.radius * 2)
 
@@ -778,13 +911,37 @@ class Fly {
       this.wingPhase += wingSpeed
       let wingSpread = sin(this.wingPhase) * 5
 
-      fill(255, 255, 255, 150)
+      // Wing color based on type
+      if (this.type === 'golden') {
+        fill(255, 240, 150, 200) // Golden translucent wings
+      } else if (this.type === 'moth') {
+        fill(120, 100, 80, 150) // Brown moth wings
+      } else if (this.type === 'queen') {
+        fill(200, 150, 255, 180) // Purple queen wings
+      } else {
+        fill(255, 255, 255, 150) // Regular white wings
+      }
+
       noStroke()
       ellipse(-wingSpread, 0, 6, 4)
       ellipse(wingSpread, 0, 6, 4)
     }
 
-    if (gamePhase === 'NIGHT') {
+    // Special markings for special types
+    if (this.type === 'golden') {
+      // Golden sparkle on body
+      fill(255, 255, 200)
+      noStroke()
+      ellipse(0, 0, 2)
+    } else if (this.type === 'queen') {
+      // Crown marking
+      stroke(255, 215, 0)
+      strokeWeight(1)
+      line(-2, -3, -1, -5)
+      line(0, -3, 0, -5)
+      line(2, -3, 1, -5)
+    } else if (gamePhase === 'NIGHT') {
+      // Regular glow abdomen
       fill(255, 255, 100, this.glowIntensity)
       noStroke()
       ellipse(0, 2, 3)
@@ -911,50 +1068,49 @@ class Obstacle {
     }
   }
 
-updateAttachedStrands() {
-  // Update web strands that are connected to this obstacle
-  for (let strand of webStrands) {
-    if (!strand || strand.broken) continue;
-    
-    // Check if strand starts at this obstacle
-    if (strand.startObstacle === this) {
-      // Update the start position to maintain the attachment
-      let angle = strand.startAngle; // Use stored angle
-      strand.start.x = this.x + cos(angle) * this.radius;
-      strand.start.y = this.y + sin(angle) * this.radius;
-      
-      // Update path if it exists
-      if (strand.path && strand.path.length > 0) {
-        strand.path[0].x = strand.start.x;
-        strand.path[0].y = strand.start.y;
-      }
-    }
-    
-    // Check if strand ends at this obstacle
-    if (strand.endObstacle === this) {
-      // Update the end position to maintain the attachment
-      let angle = strand.endAngle; // Use stored angle
-      strand.end.x = this.x + cos(angle) * this.radius;
-      strand.end.y = this.y + sin(angle) * this.radius;
-      
-      // Update path if it exists
-      if (strand.path && strand.path.length > 0) {
-        strand.path[strand.path.length - 1].x = strand.end.x;
-        strand.path[strand.path.length - 1].y = strand.end.y;
-      }
-    }
-  }
-  
-  // Also update web nodes attached to this obstacle
-  for (let node of webNodes) {
-    if (node.attachedObstacle === this) {
-      let angle = node.attachmentAngle;
-      node.x = this.x + cos(angle) * this.radius;
-      node.y = this.y + sin(angle) * this.radius;
-    }
-  }
-}
+  updateAttachedStrands () {
+    // Update web strands that are connected to this obstacle
+    for (let strand of webStrands) {
+      if (!strand || strand.broken) continue
 
+      // Check if strand starts at this obstacle
+      if (strand.startObstacle === this) {
+        // Update the start position to maintain the attachment
+        let angle = strand.startAngle // Use stored angle
+        strand.start.x = this.x + cos(angle) * this.radius
+        strand.start.y = this.y + sin(angle) * this.radius
+
+        // Update path if it exists
+        if (strand.path && strand.path.length > 0) {
+          strand.path[0].x = strand.start.x
+          strand.path[0].y = strand.start.y
+        }
+      }
+
+      // Check if strand ends at this obstacle
+      if (strand.endObstacle === this) {
+        // Update the end position to maintain the attachment
+        let angle = strand.endAngle // Use stored angle
+        strand.end.x = this.x + cos(angle) * this.radius
+        strand.end.y = this.y + sin(angle) * this.radius
+
+        // Update path if it exists
+        if (strand.path && strand.path.length > 0) {
+          strand.path[strand.path.length - 1].x = strand.end.x
+          strand.path[strand.path.length - 1].y = strand.end.y
+        }
+      }
+    }
+
+    // Also update web nodes attached to this obstacle
+    for (let node of webNodes) {
+      if (node.attachedObstacle === this) {
+        let angle = node.attachmentAngle
+        node.x = this.x + cos(angle) * this.radius
+        node.y = this.y + sin(angle) * this.radius
+      }
+    }
+  }
 
   breakAttachedStrands () {
     // Check for strands attached to this obstacle's edge
@@ -2072,7 +2228,6 @@ class Bird {
 
         // Warning notifications - but limited to prevent spam
         if (notifications.length < 3) {
-          // Limit notifications
           if (jumpStamina <= 20) {
             notifications.push(
               new Notification('CRITICAL STAMINA!', color(255, 50, 50))
@@ -2083,6 +2238,9 @@ class Bird {
             )
           }
         }
+
+        // POINTS: Award 2 points for surviving a bird attack
+        playerPoints += 2
       }
 
       // Bird bounces off

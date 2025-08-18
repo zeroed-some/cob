@@ -19,6 +19,7 @@ let gameOverTimer = 0
 let deathReason = ''
 let finalScore = 0
 let screenShake = 0
+let fliesSpawnedThisNight = 0
 
 // Resources
 let webSilk = 100
@@ -68,6 +69,7 @@ let isExhausted = false
 let fliesMunchedLastNight = 0
 let birds = []
 let staminaRegenCooldown = 0
+let staminaBonus = 0;
 
 // PHASE 4B: Wind System
 let windActive = false
@@ -733,33 +735,40 @@ function draw () {
     gamePhase = 'DAWN'
     phaseTimer = 0
 
-    // Calculate dawn stamina with CLEAR BONUS DISPLAY
-    let baseStamina = 30
-    let flyBonus = fliesMunchedLastNight * 10
-    staminaBonus = flyBonus
+    // NEW STAMINA CALCULATION:
+    // Fixed 100 max stamina, but starting amount depends on performance
+    maxJumpStamina = 100 // Always 100 max
 
-    maxJumpStamina = baseStamina + flyBonus
-    maxJumpStamina = min(maxJumpStamina, 200)
-    jumpStamina = maxJumpStamina
+    // Calculate percentage of flies munched
+    let totalFliesInNight = fliesSpawnedThisNight + flies.length // Spawned + any remaining
+    let munchPercentage = fliesMunchedLastNight / totalFliesInNight
 
-    // IMPROVED: Combine notifications to reduce overlap
-    let staminaMessage = `Dawn: ${maxJumpStamina} stamina (${baseStamina} + ${flyBonus} from ${fliesMunchedLastNight} flies)`
-    let warningMessage = ''
+    // Base stamina: 20 minimum, up to 100 for 50% or more flies munched
+    if (munchPercentage >= 0.5) {
+      jumpStamina = 100 // Full stamina for eating 50%+ of flies
+    } else {
+      // Scale from 20 to 100 based on 0% to 50% munched
+      jumpStamina = Math.floor(20 + munchPercentage * 2 * 80)
+    }
 
-    if (maxJumpStamina <= 50) {
-      warningMessage = ' ⚠️ DANGER!'
+    // Create informative notification
+    let percentEaten = Math.floor(munchPercentage * 100)
+    let staminaMessage = `Dawn: ${jumpStamina}/100 stamina (${percentEaten}% of ${totalFliesInNight} flies eaten)`
+
+    if (jumpStamina <= 30) {
       notifications.push(
-        new Notification(staminaMessage + warningMessage, color(255, 50, 50))
+        new Notification(staminaMessage + ' ⚠️ DANGER!', color(255, 50, 50))
       )
-    } else if (maxJumpStamina <= 80) {
-      warningMessage = ' - Low stamina!'
+    } else if (jumpStamina <= 60) {
       notifications.push(
-        new Notification(staminaMessage + warningMessage, color(255, 150, 50))
+        new Notification(
+          staminaMessage + ' - Low stamina!',
+          color(255, 150, 50)
+        )
       )
-    } else if (maxJumpStamina >= 150) {
-      warningMessage = ' - Well fed!'
+    } else if (jumpStamina >= 90) {
       notifications.push(
-        new Notification(staminaMessage + warningMessage, color(100, 255, 100))
+        new Notification(staminaMessage + ' - Well fed!', color(100, 255, 100))
       )
     } else {
       notifications.push(new Notification(staminaMessage, color(255, 200, 100)))
@@ -1116,6 +1125,8 @@ function draw () {
 
     jumpStamina += regen
     jumpStamina = min(jumpStamina, maxJumpStamina)
+
+    // FIX: Only set exhausted when truly out of stamina
     isExhausted = jumpStamina < jumpCost
 
     // Update and display birds
@@ -1234,6 +1245,7 @@ function draw () {
       if (flyType === 'queen') fly.baseSpeed *= 0.5
       fly.currentSpeed = fly.baseSpeed
       flies.push(fly)
+      fliesSpawnedThisNight++ // Track dynamic spawn
     }
     if (phaseTimer % 300 === 0 && foodBoxes.length < 6) {
       spawnFoodBox()
@@ -1927,6 +1939,9 @@ function applyUpgradeEffects () {
 }
 
 function spawnNightFlies () {
+  // Reset counter for new night
+  fliesSpawnedThisNight = 0
+
   // Base flies + more per night
   let numFlies = 5 + currentNight
 
@@ -1956,6 +1971,7 @@ function spawnNightFlies () {
     if (flyType === 'queen') fly.baseSpeed *= 0.5 // Queens are much slower
     fly.currentSpeed = fly.baseSpeed
     flies.push(fly)
+    fliesSpawnedThisNight++ // Track spawn
   }
 
   // PHASE 2: Guarantee at least 1 golden fly per night
@@ -1964,6 +1980,7 @@ function spawnNightFlies () {
     goldenFly.baseSpeed = baseFlySpeed * flySpeedMultiplier * 1.3
     goldenFly.currentSpeed = goldenFly.baseSpeed
     flies.push(goldenFly)
+    fliesSpawnedThisNight++ // Track spawn
     // Add notification
     notifications.push(
       new Notification('Golden Firefly Appeared! ✨', color(255, 215, 0))
@@ -1979,6 +1996,7 @@ function spawnNightFlies () {
     queenFly.baseSpeed = baseFlySpeed * flySpeedMultiplier * 0.5
     queenFly.currentSpeed = queenFly.baseSpeed
     flies.push(queenFly)
+    fliesSpawnedThisNight++ // Track spawn
     // Add notification
     notifications.push(
       new Notification('Queen Firefly Arrived! 👑', color(200, 100, 255))
@@ -2509,49 +2527,56 @@ function updateResources () {
   }
 }
 
-function handleWebDeployment() {
+function handleWebDeployment () {
   // Handle keyboard-based web deployment
   if (spacePressed && spider.isAirborne && !isDeployingWeb && webSilk > 10) {
-    isDeployingWeb = true;
-    currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
-    currentStrand.path = [spider.lastAnchorPoint.copy()];
-    
+    isDeployingWeb = true
+    currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null)
+    currentStrand.path = [spider.lastAnchorPoint.copy()]
+
     // NEW: Check if starting from an obstacle
     for (let obstacle of obstacles) {
-      let d = dist(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y, obstacle.x, obstacle.y);
+      let d = dist(
+        spider.lastAnchorPoint.x,
+        spider.lastAnchorPoint.y,
+        obstacle.x,
+        obstacle.y
+      )
       // Check if anchor is on obstacle edge (within tolerance)
       if (abs(d - obstacle.radius) < 10) {
-        currentStrand.startObstacle = obstacle;
+        currentStrand.startObstacle = obstacle
         currentStrand.startAngle = atan2(
           spider.lastAnchorPoint.y - obstacle.y,
           spider.lastAnchorPoint.x - obstacle.x
-        );
-        break;
+        )
+        break
       }
     }
-    
-    webStrands.push(currentStrand);
-    
-    let newNode = new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y);
+
+    webStrands.push(currentStrand)
+
+    let newNode = new WebNode(
+      spider.lastAnchorPoint.x,
+      spider.lastAnchorPoint.y
+    )
     // NEW: Track node attachment if on obstacle
     if (currentStrand.startObstacle) {
-      newNode.attachedObstacle = currentStrand.startObstacle;
-      newNode.attachmentAngle = currentStrand.startAngle;
+      newNode.attachedObstacle = currentStrand.startObstacle
+      newNode.attachmentAngle = currentStrand.startAngle
     }
-    webNodes.push(newNode);
+    webNodes.push(newNode)
   }
 
   // Update web for keyboard controls
   if (currentStrand && isDeployingWeb && spider.isAirborne && spacePressed) {
-    currentStrand.end = spider.pos.copy();
+    currentStrand.end = spider.pos.copy()
     if (frameCount % 2 === 0) {
-      currentStrand.path.push(spider.pos.copy());
+      currentStrand.path.push(spider.pos.copy())
     }
   }
 
   // Touch-based web deployment is handled in touchMoved()
 }
-
 
 function updateUI () {
   // Update control instructions based on device
@@ -2583,14 +2608,15 @@ function updateUI () {
     '<br>' +
     'Web Strands: <span id="strand-count">0</span><br>' +
     'Flies Caught: <span id="flies-caught">0</span> | Munched: <span id="flies-munched">0</span><br>' +
-    'Total Score: <span id="total-score">0</span>'
+    'Points: <span id="player-points">0</span> | Total Score: <span id="total-score">0</span>'
 
-  // PHASE 1 UPDATES
+  // Update all the displays
   document.getElementById('strand-count').textContent = webStrands.filter(
     s => !s.broken
   ).length
   document.getElementById('flies-caught').textContent = fliesCaught
   document.getElementById('flies-munched').textContent = fliesMunched
+  document.getElementById('player-points').textContent = playerPoints // NEW
   document.getElementById('total-score').textContent = totalFliesCaught
 
   // Update phase display
@@ -2622,27 +2648,40 @@ function updateUI () {
     timerText +
     `<br><small ${staminaColor}>Dawn Stamina: ${potentialStamina}</small>`
 
-  if (gamePhase === 'DUSK') {
-    let timeLeft = Math.ceil((DUSK_DURATION - phaseTimer) / 60)
-    timerText = `${timeLeft}s to prepare!`
-  } else if (gamePhase === 'NIGHT') {
-    let timeLeft = Math.ceil((NIGHT_DURATION - phaseTimer) / 60)
-    // PHASE 2: Count different fly types
-    let regularCount = flies.filter(f => f.type === 'regular').length
-    let goldenCount = flies.filter(f => f.type === 'golden').length
-    let mothCount = flies.filter(f => f.type === 'moth').length
-    let queenCount = flies.filter(f => f.type === 'queen').length
-
-    timerText = `${timeLeft}s • ${flies.length} flies`
-
-    // Show special fly counts if any
-    if (goldenCount > 0 || mothCount > 0 || queenCount > 0) {
-      let specialCounts = []
-      if (queenCount > 0) specialCounts.push(`${queenCount}👑`)
-      if (goldenCount > 0) specialCounts.push(`${goldenCount}✨`)
-      if (mothCount > 0) specialCounts.push(`${mothCount}🦋`)
-      timerText += ` (${specialCounts.join(' ')})`
-    }
+  if (gamePhase === 'NIGHT') {
+  let timeLeft = Math.ceil((NIGHT_DURATION - phaseTimer) / 60);
+  
+  // Calculate current munch percentage
+  let totalFliesInNight = fliesSpawnedThisNight + flies.length;
+  let currentMunchPercent = totalFliesInNight > 0 ? 
+    Math.floor((fliesMunched / totalFliesInNight) * 100) : 0;
+  
+  // Calculate predicted dawn stamina
+  let predictedStamina;
+  if (currentMunchPercent >= 50) {
+    predictedStamina = 100;
+  } else {
+    predictedStamina = Math.floor(20 + (currentMunchPercent * 2) * 0.8);
+  }
+  
+  timerText = `${timeLeft}s • ${flies.length} flies`;
+  
+  // Show special fly counts if any
+  let goldenCount = flies.filter(f => f.type === 'golden').length;
+  let mothCount = flies.filter(f => f.type === 'moth').length;
+  let queenCount = flies.filter(f => f.type === 'queen').length;
+  
+  if (goldenCount > 0 || mothCount > 0 || queenCount > 0) {
+    let specialCounts = [];
+    if (queenCount > 0) specialCounts.push(`${queenCount}👑`);
+    if (goldenCount > 0) specialCounts.push(`${goldenCount}✨`);
+    if (mothCount > 0) specialCounts.push(`${mothCount}🦋`);
+    timerText += ` (${specialCounts.join(' ')})`;
+  }
+   // Show munch progress
+  document.getElementById('timer').innerHTML = timerText + 
+    `<br><small style="color: ${predictedStamina < 40 ? '#ff4444' : predictedStamina < 70 ? '#ffaa44' : '#44ff44'}">` +
+    `Munched: ${currentMunchPercent}% → ${predictedStamina} dawn stamina</small>`;
   } else if (gamePhase === 'DAWN') {
     let timeLeft = Math.ceil((DAWN_DURATION - phaseTimer) / 60)
     // PHASE 4: Show birds and exhaustion status
@@ -2687,48 +2726,49 @@ function updateUI () {
   }
 
   // PHASE 4: Update meter based on phase
-  if (gamePhase === 'DAWN') {
-    // Show stamina instead of silk during dawn
-    document.getElementById('web-meter-label').textContent = 'STAMINA'
-    let staminaPercent = (jumpStamina / maxJumpStamina) * 100
-    document.getElementById('web-meter-fill').style.width = staminaPercent + '%'
+if (gamePhase === 'DAWN') {
+  // Show stamina instead of silk during dawn
+  document.getElementById('web-meter-label').textContent = 'STAMINA';
+  
+  // FIX: Always show percentage out of 100, not out of variable max
+  let staminaPercent = (jumpStamina / 100) * 100; // Always out of 100
+  document.getElementById('web-meter-fill').style.width = staminaPercent + '%';
 
-    // Color based on stamina level
-    if (jumpStamina < jumpCost) {
-      // Exhausted - red flash
-      let flash = sin(frameCount * 0.3) * 0.5 + 0.5
-      document.getElementById(
-        'web-meter-fill'
-      ).style.background = `linear-gradient(90deg, rgb(255, ${
-        50 + flash * 50
-      }, ${50 + flash * 50}), rgb(200, ${30 + flash * 30}, ${30 + flash * 30}))`
-    } else if (jumpStamina < maxJumpStamina * 0.3) {
-      // Very tired - orange-red
-      document.getElementById('web-meter-fill').style.background =
-        'linear-gradient(90deg, #FF6B35, #FF4444)'
-    } else if (jumpStamina < maxJumpStamina * 0.5) {
-      // Tired - orange
-      document.getElementById('web-meter-fill').style.background =
-        'linear-gradient(90deg, #FFA500, #FF8C00)'
-    } else {
-      // Good stamina - yellow-orange
-      document.getElementById('web-meter-fill').style.background =
-        'linear-gradient(90deg, #FFD700, #FFA500)'
-    }
-    if (jumpStamina <= 0 && !gameOver) {
-      push()
-      fill(255, 0, 0, 50 + sin(frameCount * 0.3) * 50)
-      rect(0, 0, width, height)
-
-      textAlign(CENTER)
-      textSize(32)
-      fill(255, 50, 50)
-      stroke(0)
-      strokeWeight(3)
-      text('NO STAMINA - AVOID BIRDS!', width / 2, height / 2)
-      pop()
-    }
+  // Color based on stamina level
+  if (jumpStamina < 20) {
+    // Exhausted - red flash
+    let flash = sin(frameCount * 0.3) * 0.5 + 0.5;
+    document.getElementById('web-meter-fill').style.background = 
+      `linear-gradient(90deg, rgb(255, ${50 + flash * 50}, ${50 + flash * 50}), rgb(200, ${30 + flash * 30}, ${30 + flash * 30}))`;
+  } else if (jumpStamina < 40) {
+    // Very tired - orange-red
+    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FF6B35, #FF4444)';
+  } else if (jumpStamina < 60) {
+    // Tired - orange
+    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FFA500, #FF8C00)';
+  } else if (jumpStamina < 80) {
+    // OK - yellow-orange
+    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #FFD700, #FFA500)';
   } else {
+    // Good stamina - green-yellow
+    document.getElementById('web-meter-fill').style.background = 'linear-gradient(90deg, #90EE90, #FFD700)';
+  }
+  
+  // Show critical warning overlay
+  if (jumpStamina <= 0 && !gameOver) {
+    push();
+    fill(255, 0, 0, 50 + sin(frameCount * 0.3) * 50);
+    rect(0, 0, width, height);
+
+    textAlign(CENTER);
+    textSize(32);
+    fill(255, 50, 50);
+    stroke(0);
+    strokeWeight(3);
+    text('NO STAMINA - AVOID BIRDS!', width / 2, height / 2);
+    pop();
+  }
+} else {
     // Normal silk meter
     document.getElementById('web-meter-label').textContent = 'SILK'
     let meterPercent = (webSilk / maxWebSilk) * 100
@@ -2840,6 +2880,7 @@ window.restartGame = function () {
   currentNight = 1
   fliesCaught = 0
   fliesMunched = 0
+  playerPoints = 0
   totalFliesCaught = 0
   jumpStamina = 100
   maxJumpStamina = 100
@@ -3023,58 +3064,67 @@ function recycleNearbyWeb () {
   }
 }
 
-function touchStarted() {
+function touchStarted () {
   if (touches.length > 0) {
-    touchStartTime = millis();
-    touchStartX = touches[0].x;
-    touchStartY = touches[0].y;
+    touchStartTime = millis()
+    touchStartX = touches[0].x
+    touchStartY = touches[0].y
 
     // Check for double tap on spider to munch
-    let touchOnSpider = dist(touches[0].x, touches[0].y, spider.pos.x, spider.pos.y) < 30;
+    let touchOnSpider =
+      dist(touches[0].x, touches[0].y, spider.pos.x, spider.pos.y) < 30
 
     if (touchOnSpider && millis() - lastTapTime < 300) {
       // Double tap detected on spider - MUNCH!
-      spider.munch();
-      lastTapTime = 0; // Reset to prevent triple tap
+      spider.munch()
+      lastTapTime = 0 // Reset to prevent triple tap
     } else if (!spider.isAirborne) {
       // Single tap while on ground - jump
-      spider.jump(touches[0].x, touches[0].y);
-      lastTapTime = millis();
+      spider.jump(touches[0].x, touches[0].y)
+      lastTapTime = millis()
     } else if (spider.isAirborne && webSilk > 10 && !isDeployingWeb) {
       // Start web deployment if airborne (only if not already deploying)
-      touchHolding = true;
-      isDeployingWeb = true;
-      currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null);
-      currentStrand.path = [spider.lastAnchorPoint.copy()];
-      
+      touchHolding = true
+      isDeployingWeb = true
+      currentStrand = new WebStrand(spider.lastAnchorPoint.copy(), null)
+      currentStrand.path = [spider.lastAnchorPoint.copy()]
+
       for (let obstacle of obstacles) {
-        let d = dist(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y, obstacle.x, obstacle.y);
+        let d = dist(
+          spider.lastAnchorPoint.x,
+          spider.lastAnchorPoint.y,
+          obstacle.x,
+          obstacle.y
+        )
         // Check if anchor is on obstacle edge (within tolerance)
         if (abs(d - obstacle.radius) < 10) {
-          currentStrand.startObstacle = obstacle;
+          currentStrand.startObstacle = obstacle
           currentStrand.startAngle = atan2(
             spider.lastAnchorPoint.y - obstacle.y,
             spider.lastAnchorPoint.x - obstacle.x
-          );
-          break;
+          )
+          break
         }
       }
-      
-      webStrands.push(currentStrand);
-      
-      let newNode = new WebNode(spider.lastAnchorPoint.x, spider.lastAnchorPoint.y);
+
+      webStrands.push(currentStrand)
+
+      let newNode = new WebNode(
+        spider.lastAnchorPoint.x,
+        spider.lastAnchorPoint.y
+      )
       // NEW: Track node attachment if on obstacle
       if (currentStrand.startObstacle) {
-        newNode.attachedObstacle = currentStrand.startObstacle;
-        newNode.attachmentAngle = currentStrand.startAngle;
+        newNode.attachedObstacle = currentStrand.startObstacle
+        newNode.attachmentAngle = currentStrand.startAngle
       }
-      webNodes.push(newNode);
+      webNodes.push(newNode)
     } else if (spider.isAirborne && isDeployingWeb) {
       // If already deploying and user taps again, just continue (don't create new strand)
-      touchHolding = true;
+      touchHolding = true
     }
   }
-  return false; // Prevent default
+  return false // Prevent default
 }
 
 function touchMoved () {

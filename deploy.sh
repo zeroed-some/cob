@@ -54,7 +54,6 @@ sudo chown -R root:root "$RELEASES/$STAMP"
 sudo find "$RELEASES/$STAMP" -type d -exec chmod 0755 {} +
 sudo find "$RELEASES/$STAMP" -type f -exec chmod 0644 {} +
 
-# If the nginx user is different on your system, adjust here
 NGINX_USER="nginx"
 if id "$NGINX_USER" >/dev/null 2>&1; then
   sudo -u "$NGINX_USER" test -r "$RELEASES/$STAMP/index.html" || { echo "✗ nginx user cannot read index.html"; exit 1; }
