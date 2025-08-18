@@ -242,76 +242,64 @@ class Spider {
 
     // Check home branch collision (one-way platform)
     if (window.homeBranch && this.isAirborne && this.vel.y > 0.1) {
-      // Only when actually falling
       let branch = window.homeBranch
 
-      // Check if spider is within branch X range
-      let branchStart = Math.min(branch.startX, branch.endX)
-      let branchEnd = Math.max(branch.startX, branch.endX)
+      // Calculate the actual geometric bounds
+      let leftX = Math.min(branch.startX, branch.endX)
+      let rightX = Math.max(branch.startX, branch.endX)
 
-      // FIX: Extend collision detection beyond visual tip
-      // The visual branch ends at branchEnd, but we need collision slightly beyond
-      let collisionPadding = 15 // Extra collision at the tip
+      // IMPORTANT: Extend the check zone beyond the mathematical end
+      // The branch visually extends past endX due to strokeWeight and bezier curves
+      let checkPadding = 20 // Add padding for the visual overhang
 
       if (
-        this.pos.x >= branchStart - 10 &&
-        this.pos.x <= branchEnd + collisionPadding
+        this.pos.x >= leftX - checkPadding &&
+        this.pos.x <= rightX + checkPadding
       ) {
-        // Calculate position along branch (0 to 1)
-        // FIX: Clamp t to ensure we handle tip properly
-        let t = (this.pos.x - branchStart) / (branchEnd - branchStart)
+        // Calculate normalized position along branch
+        let t
 
-        // Allow t to go slightly beyond 1.0 for tip collision
-        if (this.pos.x > branchEnd) {
-          t = 1.0 // At the tip, use tip thickness
+        if (branch.side === 'left') {
+          // Left branch: startX is base, endX is tip
+          t = (this.pos.x - branch.startX) / (branch.endX - branch.startX)
         } else {
-          t = constrain(t, 0, 1)
+          // Right branch: startX is base, endX is tip (but startX > endX)
+          t = (branch.startX - this.pos.x) / (branch.startX - branch.endX)
         }
 
-        // Branch visual thickness tapers from full at start to 35% at end
-        let branchTopThickness
-        if (t >= 1.0) {
-          // At the very tip, maintain minimum collision thickness
-          branchTopThickness = branch.thickness * 0.35
+        // CRITICAL FIX: Allow t to exceed 1 for the tip overhang
+        // The visual branch extends past the mathematical endpoint
+        let maxT = 1.15 // Allow 15% overshoot for visual overhang
+        t = constrain(t, 0, maxT)
+
+        // Calculate thickness
+        let visualThickness
+        if (t > 1.0) {
+          // Past the mathematical end - use minimum tip thickness
+          visualThickness = branch.thickness * 0.35
         } else {
-          branchTopThickness = lerp(
-            branch.thickness * 0.9,
-            branch.thickness * 0.35,
-            t
-          )
+          // Normal taper
+          visualThickness = lerp(branch.thickness, branch.thickness * 0.35, t)
         }
 
-        // The branch is drawn centered at branch.y
-        let branchSurfaceY = branch.y - branchTopThickness
+        // The branch is drawn centered at branch.y; compute top/bottom with rotation
+        let rotationOffset = this.pos.x * branch.angle
+        let branchTopY = (branch.y - visualThickness) + rotationOffset
+        let branchBottomY = (branch.y + visualThickness) + rotationOffset
 
-        // FIX: Correct angle calculation based on branch side
-        let angleCorrection
-        if (branch.side === 'right') {
-          // Right branch slopes down to the left (negative angle)
-          // Use distance from the end point (which is on the left for right branches)
-          angleCorrection = -(this.pos.x - branchEnd) * abs(branch.angle)
-        } else {
-          // Left branch slopes down to the right (positive angle)
-          // Use distance from the start point
-          angleCorrection = (this.pos.x - branchStart) * abs(branch.angle)
-        }
-        branchSurfaceY += angleCorrection
-
-        // Check if spider is crossing the branch from above
+        // Check collision
         let prevY = this.pos.y - this.vel.y
 
-        // FIX: More generous collision detection at the tip
-        let collisionBuffer = t >= 0.9 ? 5 : 0 // Extra buffer near tip
-
+        // One-way platform collision
         if (
-          prevY <= branchSurfaceY + collisionBuffer && // Was above (with buffer)
-          this.pos.y + this.radius >= branchSurfaceY && // Now at or below
-          this.pos.y < branch.y + branch.thickness
+          prevY <= branchTopY && // Was above
+          this.pos.y + this.radius >= branchTopY && // Now at or below
+          this.pos.y - this.radius < branchBottomY // Not completely below the rotated bottom
         ) {
-          // Not too far below
+          // Not completely below
 
-          // Place spider on the branch surface
-          this.pos.y = branchSurfaceY - this.radius
+          // Land on branch
+          this.pos.y = branchTopY - this.radius
           this.land()
           this.attachedObstacle = null
         }
@@ -2199,7 +2187,7 @@ class Bird {
 
         // If spider has no stamina, GAME OVER!
         if (jumpStamina <= 0) {
-          triggerGameOver('Exhausted spider caught by bird!')
+          triggerGameOver('Oof')
           return
         }
 

@@ -477,7 +477,7 @@ function setup () {
   numObstacles = constrain(numObstacles, 15, 25)
 
   // Create ant balloons
-  let numBalloons = Math.floor(random(11, 15))
+  let numBalloons = Math.floor(random(15, 21))
   for (let i = 0; i < numBalloons; i++) {
     let attempts = 0
     let placed = false
@@ -520,7 +520,7 @@ function setup () {
   }
 
   // Create beetles
-  let numBeetles = Math.floor(random(8, 11))
+  let numBeetles = Math.floor(random(9, 15))
   for (let i = 0; i < numBeetles; i++) {
     let attempts = 0
     let placed = false
@@ -563,7 +563,7 @@ function setup () {
   }
 
   // Create LESS leaves. they're unrealistic!
-  let numLeaves = Math.floor(random(4, 7))
+  let numLeaves = Math.floor(random(7, 9))
   for (let i = 0; i < numLeaves; i++) {
     let attempts = 0
     let placed = false
