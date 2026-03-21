@@ -968,6 +968,12 @@ class Obstacle {
     this.bobSpeed = random(0.02, 0.04)
     this.bobAmount = 0
 
+    // Wind effect properties
+    this.windSway = 0 // Current sway amount
+    this.windSwayTarget = 0 // Target sway for smooth animation
+    this.windBob = 0 // Additional vertical movement from wind
+    this.basketSwing = 0 // For balloon basket swinging
+
     // Type-specific initialization
     if (this.type === 'balloon') {
       this.bobAmount = 8 // Balloons bob more
@@ -1005,6 +1011,57 @@ class Obstacle {
     // Bobbing motion for all types
     let bob = sin(frameCount * this.bobSpeed + this.bobOffset) * this.bobAmount
     this.y = this.originalY + bob
+
+    // ENHANCED: Apply wind effects
+    if (windActive) {
+      // Different wind responses by type
+      if (this.type === 'balloon') {
+        // Balloons are highly affected by wind
+        this.windSwayTarget = cos(windDirection) * windStrength * 15 // Strong horizontal push
+        this.windBob =
+          sin(frameCount * 0.04 + this.bobOffset) * windStrength * 3 // Extra vertical movement
+
+        // Basket swings opposite to balloon movement (pendulum effect)
+        this.basketSwing =
+          -this.windSway * 0.5 + sin(frameCount * 0.06) * windStrength * 0.3
+
+        // Actually move the balloon
+        this.originalX += cos(windDirection) * windStrength * 0.08
+
+        // Keep on screen with stronger resistance at edges
+        if (this.originalX < 50) {
+          this.originalX = 50
+          this.windSwayTarget *= -0.5 // Bounce back effect
+        }
+        if (this.originalX > width - 50) {
+          this.originalX = width - 50
+          this.windSwayTarget *= -0.5
+        }
+      } else if (this.type === 'beetle') {
+        // Beetles resist but still affected
+        this.windSwayTarget = cos(windDirection) * windStrength * 3
+        // Fight against wind
+        this.driftAngle -= cos(windDirection) * windStrength * 0.01
+      } else if (this.type === 'leaf') {
+        // Leaves flutter in wind
+        this.windSwayTarget = cos(windDirection) * windStrength * 5
+        this.rotation += windStrength * 0.02 // Spin faster
+      }
+    } else {
+      // No wind, return to normal
+      this.windSwayTarget = 0
+      this.windBob = 0
+      this.basketSwing = 0
+    }
+
+    // Smooth sway animation
+    this.windSway = lerp(this.windSway, this.windSwayTarget, 0.1)
+
+    // Apply wind sway to position
+    this.x = this.originalX + this.windSway
+
+    // Apply wind bob to vertical position
+    this.y = this.originalY + bob + this.windBob
 
     // Beetle-specific drift
     if (this.type === 'beetle') {
@@ -1201,272 +1258,293 @@ class Obstacle {
   }
 
   display () {
+  push()
+  translate(this.x, this.y)
+
+  if (this.type === 'balloon') {
+    // ============================================
+    // HOT AIR BALLOON WITH CANVAS TEXTURE
+    // ============================================
     push()
-    translate(this.x, this.y)
+    
+    // ENHANCED: Tilt balloon based on wind
+    if (windActive) {
+      rotate(this.windSway * 0.01)  // Slight tilt in wind direction
+    }
 
-    if (this.type === 'balloon') {
-      // ============================================
-      // HOT AIR BALLOON WITH CANVAS TEXTURE
-      // ============================================
+    // Balloon shadow
+    noStroke()
+    fill(0, 0, 0, 30)
+    ellipse(5, 5, this.radius * 2.1)
+
+    // Main balloon with canvas panel texture
+    // Draw vertical panels like a real hot air balloon
+    let numPanels = 8
+    for (let i = 0; i < numPanels; i++) {
       push()
 
-      // Balloon shadow
-      noStroke()
-      fill(0, 0, 0, 30)
-      ellipse(5, 5, this.radius * 2.1)
+      // Rotate for each panel
+      rotate((TWO_PI / numPanels) * i)
 
-      // Main balloon with canvas panel texture
-      // Draw vertical panels like a real hot air balloon
-      let numPanels = 8
-      for (let i = 0; i < numPanels; i++) {
-        push()
-
-        // Rotate for each panel
-        rotate((TWO_PI / numPanels) * i)
-
-        // Alternate panel colors for classic hot air balloon look
-        if (i % 2 === 0) {
-          fill(
-            red(this.balloonColor),
-            green(this.balloonColor),
-            blue(this.balloonColor)
-          )
-        } else {
-          // Slightly darker alternate panels
-          fill(
-            red(this.balloonColor) * 0.9,
-            green(this.balloonColor) * 0.9,
-            blue(this.balloonColor) * 0.9
-          )
-        }
-
-        // Draw panel as pie slice
-        noStroke()
-        arc(
-          0,
-          0,
-          this.radius * 2,
-          this.radius * 2,
-          -PI / numPanels,
-          PI / numPanels,
-          PIE
+      // Alternate panel colors for classic hot air balloon look
+      if (i % 2 === 0) {
+        fill(
+          red(this.balloonColor),
+          green(this.balloonColor),
+          blue(this.balloonColor)
         )
-
-        pop()
+      } else {
+        // Slightly darker alternate panels
+        fill(
+          red(this.balloonColor) * 0.9,
+          green(this.balloonColor) * 0.9,
+          blue(this.balloonColor) * 0.9
+        )
       }
 
-      // Add panel seams (the ropes/stitching between panels)
-      stroke(60, 40, 20, 110)
-      strokeWeight(1)
-      for (let i = 0; i < numPanels; i++) {
-        let angle = (TWO_PI / numPanels) * i
-        let x1 = cos(angle) * this.radius * 0.2
-        let y1 = sin(angle) * this.radius * 0.2
-        let x2 = cos(angle) * this.radius * 0.95
-        let y2 = sin(angle) * this.radius * 0.95
-        line(x1, y1, x2, y2)
-      }
-
-      // Add circular reinforcement bands
-      noFill()
-      stroke(80, 50, 30, 80)
-      strokeWeight(1.5)
-      ellipse(0, 0, this.radius * 1.4)
-      ellipse(0, 0, this.radius * 0.8)
-
-      // Matte fabric shading (subtle, non-glossy)
+      // Draw panel as pie slice
       noStroke()
-      // Soft radial shading toward top-left to imply ambient light without specular shine
-      for (
-        let r = this.radius * 1.2;
-        r > this.radius * 0.2;
-        r -= this.radius * 0.15
-      ) {
-        fill(255, 255, 255, 8) // very low alpha
-        ellipse(-this.radius * 0.25, -this.radius * 0.35, r * 0.25, r * 0.18)
-      }
-      // Global matte overlay to reduce plastic look
-      noStroke()
-      fill(230, 210, 190, 18)
-      ellipse(0, 0, this.radius * 2, this.radius * 2)
-
-      // Bottom opening of balloon (where flame goes)
-      fill(40, 20, 10)
-      ellipse(0, this.radius * 0.9, this.radius * 0.4, this.radius * 0.15)
-
-      // Support ropes from balloon to basket
-      stroke(80, 60, 40)
-      strokeWeight(2)
-      // Four support ropes
-      line(-this.radius * 0.3, this.radius * 0.85, -8, this.radius + 20)
-      line(this.radius * 0.3, this.radius * 0.85, 8, this.radius + 20)
-      line(-this.radius * 0.15, this.radius * 0.9, -4, this.radius + 20)
-      line(this.radius * 0.15, this.radius * 0.9, 4, this.radius + 20)
-
-      // FLAME EFFECT (between balloon and basket)
-      push()
-      translate(0, this.radius + 10)
-
-      // Flame glow
-      noStroke()
-      fill(255, 200, 0, 30 + sin(frameCount * 0.2) * 20)
-      ellipse(0, 0, 30, 30)
-      fill(255, 150, 0, 50 + sin(frameCount * 0.3) * 30)
-      ellipse(0, 0, 20, 25)
-
-      // Animated flame
-      push()
-      let flameHeight = 12 + sin(frameCount * 0.4) * 4
-      let flameWave = sin(frameCount * 0.3) * 2
-
-      // Outer flame (orange)
-      fill(255, 150, 0)
-      beginShape()
-      vertex(-5, 5)
-      bezierVertex(
-        -5 + flameWave,
-        -flameHeight * 0.5,
-        -2 + flameWave,
-        -flameHeight * 0.8,
-        flameWave,
-        -flameHeight
+      arc(
+        0,
+        0,
+        this.radius * 2,
+        this.radius * 2,
+        -PI / numPanels,
+        PI / numPanels,
+        PIE
       )
-      bezierVertex(
-        2 + flameWave,
-        -flameHeight * 0.8,
-        5 + flameWave,
-        -flameHeight * 0.5,
-        5,
-        5
-      )
-      endShape(CLOSE)
-
-      // Inner flame (yellow/white)
-      fill(255, 255, 150)
-      beginShape()
-      vertex(-2, 5)
-      bezierVertex(
-        -2 + flameWave * 0.5,
-        -flameHeight * 0.3,
-        -1 + flameWave * 0.5,
-        -flameHeight * 0.5,
-        flameWave * 0.5,
-        -flameHeight * 0.7
-      )
-      bezierVertex(
-        1 + flameWave * 0.5,
-        -flameHeight * 0.5,
-        2 + flameWave * 0.5,
-        -flameHeight * 0.3,
-        2,
-        5
-      )
-      endShape(CLOSE)
-
-      // Flame tip (bright white)
-      fill(255, 255, 255)
-      ellipse(flameWave * 0.5, -flameHeight * 0.5, 3, 5)
-      pop()
 
       pop()
+    }
 
-      // BIGGER, MORE DETAILED BASKET
-      push()
-      translate(0, this.radius + 25)
+    // Add panel seams (the ropes/stitching between panels)
+    stroke(60, 40, 20, 110)
+    strokeWeight(1)
+    for (let i = 0; i < numPanels; i++) {
+      let angle = (TWO_PI / numPanels) * i
+      let x1 = cos(angle) * this.radius * 0.2
+      let y1 = sin(angle) * this.radius * 0.2
+      let x2 = cos(angle) * this.radius * 0.95
+      let y2 = sin(angle) * this.radius * 0.95
+      line(x1, y1, x2, y2)
+    }
 
-      // Basket shadow
-      noStroke()
-      fill(0, 0, 0, 20)
-      rect(-11, 2, 22, 15, 2)
+    // Add circular reinforcement bands
+    noFill()
+    stroke(80, 50, 30, 80)
+    strokeWeight(1.5)
+    ellipse(0, 0, this.radius * 1.4)
+    ellipse(0, 0, this.radius * 0.8)
 
-      // Main basket - bigger to see ant better
-      fill(101, 67, 33)
-      stroke(80, 50, 20)
-      strokeWeight(1.5)
-      rect(-10, 0, 20, 14, 2) // Bigger basket
+    // Matte fabric shading (subtle, non-glossy)
+    noStroke()
+    // Soft radial shading toward top-left to imply ambient light without specular shine
+    for (
+      let r = this.radius * 1.2;
+      r > this.radius * 0.2;
+      r -= this.radius * 0.15
+    ) {
+      fill(255, 255, 255, 8) // very low alpha
+      ellipse(-this.radius * 0.25, -this.radius * 0.35, r * 0.25, r * 0.18)
+    }
+    // Global matte overlay to reduce plastic look
+    noStroke()
+    fill(230, 210, 190, 18)
+    ellipse(0, 0, this.radius * 2, this.radius * 2)
 
-      // Woven basket texture
-      stroke(80, 50, 20, 150)
-      strokeWeight(1)
-      // Vertical weaves
-      for (let i = -8; i < 8; i += 3) {
-        line(i, 1, i, 13)
-      }
-      // Horizontal weaves
-      for (let i = 3; i < 12; i += 3) {
-        line(-9, i, 9, i)
-      }
+    // Bottom opening of balloon (where flame goes)
+    fill(40, 20, 10)
+    ellipse(0, this.radius * 0.9, this.radius * 0.4, this.radius * 0.15)
 
-      // Basket rim (thicker, more pronounced)
-      stroke(60, 40, 20)
-      strokeWeight(2)
-      line(-10, 0, 10, 0)
+    // Support ropes from balloon to basket
+    stroke(80, 60, 40)
+    strokeWeight(2)
+    // Four support ropes
+    line(-this.radius * 0.3, this.radius * 0.85, -8, this.radius + 20)
+    line(this.radius * 0.3, this.radius * 0.85, 8, this.radius + 20)
+    line(-this.radius * 0.15, this.radius * 0.9, -4, this.radius + 20)
+    line(this.radius * 0.15, this.radius * 0.9, 4, this.radius + 20)
 
-      // Corner reinforcements
-      fill(80, 50, 20)
-      noStroke()
-      ellipse(-9, 0, 3)
-      ellipse(9, 0, 3)
+    // FLAME EFFECT (between balloon and basket)
+    push()
+    translate(0, this.radius + 10)
 
-      pop()
+    // Flame glow
+    noStroke()
+    fill(255, 200, 0, 30 + sin(frameCount * 0.2) * 20)
+    ellipse(0, 0, 30, 30)
+    fill(255, 150, 0, 50 + sin(frameCount * 0.3) * 30)
+    ellipse(0, 0, 20, 25)
 
-      // DETAILED ANT PILOT (bigger, more visible)
-      push()
-      translate(0, this.radius + 28)
+    // Animated flame
+    push()
+    let flameHeight = 12 + sin(frameCount * 0.4) * 4
+    let flameWave = sin(frameCount * 0.3) * 2
 
-      // Ant body
-      fill(20)
-      noStroke()
-      ellipse(0, 0, 8, 5) // Thorax
-      ellipse(0, -3, 6, 5) // Head
-      ellipse(0, 3, 7, 6) // Abdomen
+    // Outer flame (orange)
+    fill(255, 150, 0)
+    beginShape()
+    vertex(-5, 5)
+    bezierVertex(
+      -5 + flameWave,
+      -flameHeight * 0.5,
+      -2 + flameWave,
+      -flameHeight * 0.8,
+      flameWave,
+      -flameHeight
+    )
+    bezierVertex(
+      2 + flameWave,
+      -flameHeight * 0.8,
+      5 + flameWave,
+      -flameHeight * 0.5,
+      5,
+      5
+    )
+    endShape(CLOSE)
 
-      // Ant eyes
-      fill(255, 100, 100)
-      ellipse(-2, -3, 2)
-      ellipse(2, -3, 2)
+    // Inner flame (yellow/white)
+    fill(255, 255, 150)
+    beginShape()
+    vertex(-2, 5)
+    bezierVertex(
+      -2 + flameWave * 0.5,
+      -flameHeight * 0.3,
+      -1 + flameWave * 0.5,
+      -flameHeight * 0.5,
+      flameWave * 0.5,
+      -flameHeight * 0.7
+    )
+    bezierVertex(
+      1 + flameWave * 0.5,
+      -flameHeight * 0.5,
+      2 + flameWave * 0.5,
+      -flameHeight * 0.3,
+      2,
+      5
+    )
+    endShape(CLOSE)
 
-      // Antennae
-      stroke(20)
-      strokeWeight(1)
-      line(-1, -5, -3, -8)
-      line(1, -5, 3, -8)
+    // Flame tip (bright white)
+    fill(255, 255, 255)
+    ellipse(flameWave * 0.5, -flameHeight * 0.5, 3, 5)
+    pop()
 
-      // Little ant arms holding basket edge
-      strokeWeight(1.5)
-      line(-3, 0, -6, -3)
-      line(3, 0, 6, -3)
+    pop()
 
-      // Ant legs visible over basket edge
-      line(-2, 2, -4, 5)
-      line(2, 2, 4, 5)
+    // BIGGER, MORE DETAILED BASKET WITH SWING
+    push()
+    translate(0, this.radius + 25)
+    
+    // ENHANCED: Apply basket swing
+    if (windActive) {
+      rotate(this.basketSwing * 0.02)
+    }
 
-      // Optional: Tiny pilot goggles
-      stroke(100, 50, 0)
-      strokeWeight(1)
-      noFill()
-      ellipse(-2, -3, 3)
-      ellipse(2, -3, 3)
-      line(-0.5, -3, 0.5, -3)
+    // Basket shadow
+    noStroke()
+    fill(0, 0, 0, 20)
+    rect(-11, 2, 22, 15, 2)
 
-      pop()
+    // Main basket - bigger to see ant better
+    fill(101, 67, 33)
+    stroke(80, 50, 20)
+    strokeWeight(1.5)
+    rect(-10, 0, 20, 14, 2) // Bigger basket
 
-      // Sandbags hanging from basket (optional detail)
-      push()
-      translate(0, this.radius + 25)
-      fill(80, 60, 40)
-      noStroke()
-      ellipse(-12, 10, 4, 5)
-      ellipse(12, 10, 4, 5)
-      // Sandbag ropes
-      stroke(60, 40, 20)
-      strokeWeight(0.5)
-      line(-10, 7, -12, 10)
-      line(10, 7, 12, 10)
-      pop()
+    // Woven basket texture
+    stroke(80, 50, 20, 150)
+    strokeWeight(1)
+    // Vertical weaves
+    for (let i = -8; i < 8; i += 3) {
+      line(i, 1, i, 13)
+    }
+    // Horizontal weaves
+    for (let i = 3; i < 12; i += 3) {
+      line(-9, i, 9, i)
+    }
 
-      pop()
-    } else if (this.type === 'beetle') {
+    // Basket rim (thicker, more pronounced)
+    stroke(60, 40, 20)
+    strokeWeight(2)
+    line(-10, 0, 10, 0)
+
+    // Corner reinforcements
+    fill(80, 50, 20)
+    noStroke()
+    ellipse(-9, 0, 3)
+    ellipse(9, 0, 3)
+
+    pop()
+
+    // DETAILED ANT PILOT (bigger, more visible)
+    push()
+    translate(0, this.radius + 28)
+    
+    // ENHANCED: Ant holds on tighter in wind
+    if (windActive) {
+      rotate(-this.basketSwing * 0.01)  // Ant leans opposite to basket
+    }
+
+    // Ant body
+    fill(20)
+    noStroke()
+    ellipse(0, 0, 8, 5) // Thorax
+    ellipse(0, -3, 6, 5) // Head
+    ellipse(0, 3, 7, 6) // Abdomen
+
+    // Ant eyes
+    fill(255, 100, 100)
+    ellipse(-2, -3, 2)
+    ellipse(2, -3, 2)
+
+    // Antennae
+    stroke(20)
+    strokeWeight(1)
+    line(-1, -5, -3, -8)
+    line(1, -5, 3, -8)
+
+    // Little ant arms holding basket edge
+    strokeWeight(1.5)
+    line(-3, 0, -6, -3)
+    line(3, 0, 6, -3)
+
+    // Ant legs visible over basket edge
+    line(-2, 2, -4, 5)
+    line(2, 2, 4, 5)
+
+    // Optional: Tiny pilot goggles
+    stroke(100, 50, 0)
+    strokeWeight(1)
+    noFill()
+    ellipse(-2, -3, 3)
+    ellipse(2, -3, 3)
+    line(-0.5, -3, 0.5, -3)
+
+    pop()
+
+    // Sandbags hanging from basket (optional detail)
+    push()
+    translate(0, this.radius + 25)
+    
+    // ENHANCED: Sandbags swing in wind
+    if (windActive) {
+      rotate(this.basketSwing * 0.03)
+    }
+    
+    fill(80, 60, 40)
+    noStroke()
+    ellipse(-12, 10, 4, 5)
+    ellipse(12, 10, 4, 5)
+    // Sandbag ropes
+    stroke(60, 40, 20)
+    strokeWeight(0.5)
+    line(-10, 7, -12, 10)
+    line(10, 7, 12, 10)
+    pop()
+
+    pop()
+  } else if (this.type === 'beetle') {
       push()
       rotate(this.rotation)
 

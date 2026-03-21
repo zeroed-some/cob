@@ -879,30 +879,65 @@ function draw () {
 
   // PHASE 4B: Apply wind to airborne entities
   if (windActive) {
-    // Push spider if airborne
+    // Push spider if airborne - MORE DRAMATIC
     if (spider.isAirborne) {
-      spider.vel.x += cos(windDirection) * windStrength * 0.1
+      spider.vel.x += cos(windDirection) * windStrength * 0.15 // Increased from 0.1
+      spider.vel.y += sin(frameCount * 0.05) * windStrength * 0.03 // Add vertical wobble
     }
 
-    // Push flies
+    // Push flies - MORE VISIBLE
     for (let fly of flies) {
       if (!fly.stuck && !fly.caught) {
-        fly.vel.x += cos(windDirection) * windStrength * 0.05
+        fly.vel.x += cos(windDirection) * windStrength * 0.08 // Increased from 0.05
+        fly.vel.y += sin(frameCount * 0.1 + fly.wingPhase) * windStrength * 0.02 // Turbulence
       }
     }
 
-    // Make webs sway
+    // ENHANCED: Make webs sway and stretch
     for (let strand of webStrands) {
       if (!strand.broken) {
-        strand.vibrate(windStrength * 0.5)
+        // Stronger vibration
+        strand.vibrate(windStrength * 0.8) // Increased from 0.5
+
+        // Apply lateral force to web path points for realistic sway
+        if (strand.path && strand.path.length > 2) {
+          for (let i = 1; i < strand.path.length - 1; i++) {
+            let point = strand.path[i]
+            // Middle points sway more than ends
+            let swayFactor = sin((i / strand.path.length) * PI)
+            point.x += cos(windDirection) * windStrength * swayFactor * 0.3
+            // Add some vertical movement too
+            point.y +=
+              sin(frameCount * 0.08 + i * 0.1) *
+              windStrength *
+              swayFactor *
+              0.15
+          }
+        }
+
         // Check if strand is overstretched and should break
-        if (strand.tension > 1.2 && windStrength > 3) {
-          if (random() < 0.01) {
-            // Small chance per frame
+        if (strand.tension > 1.0 && windStrength > 4) {
+          // Lowered from 1.2
+          if (random() < (0.02 * windStrength) / 5) {
+            // Increased chance based on wind strength
             strand.broken = true
             notifications.push(
               new Notification('Wind snapped a web!', color(255, 150, 100))
             )
+            // Add dramatic snap particles
+            for (let j = 0; j < 8; j++) {
+              let p = new Particle(
+                strand.path[Math.floor(strand.path.length / 2)].x,
+                strand.path[Math.floor(strand.path.length / 2)].y
+              )
+              p.vel = createVector(
+                cos(windDirection) * random(3, 6),
+                random(-2, 2)
+              )
+              p.color = color(255, 255, 255)
+              p.size = random(2, 5)
+              particles.push(p)
+            }
           }
         }
       }
@@ -1739,16 +1774,22 @@ function spawnThiefBird () {
 function startWindGust () {
   windActive = true
   windDirection = random() < 0.5 ? 0 : PI // Left or right
-  windStrength = random(2, 5) // Variable strength
+  windStrength = random(3, 6)  // Increased from (2, 5)
   windDuration = random(300, 600) // 5-10 seconds
   windTimer = 0
   windParticles = []
 
-  // Notification
+  // More dramatic notification
   let direction = windDirection === 0 ? '→' : '←'
+  let intensity = windStrength > 4.5 ? 'Strong' : windStrength > 3.5 ? 'Moderate' : 'Light'
   notifications.push(
-    new Notification(`Wind gust ${direction}`, color(200, 200, 255))
+    new Notification(`${intensity} wind gust ${direction}`, color(200, 200, 255))
   )
+  
+  // Screen shake for strong winds
+  if (windStrength > 4.5) {
+    screenShake = 5
+  }
 }
 
 function updateWind () {
